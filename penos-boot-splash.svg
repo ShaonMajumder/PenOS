@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="768" viewBox="0 0 1024 768">
+  <rect width="1024" height="768" fill="#050814"/>
+
+  <!-- PenOS Title -->
+  <text
+    x="50%" y="55%"
+    font-family="system-ui, sans-serif"
+    font-size="96"
+    font-weight="700"
+    fill="#E5E7EB"
+    dominant-baseline="middle"
+    text-anchor="middle"
+    letter-spacing="0.06em"
+  >
+    Pen<tspan fill="#38BDF8">OS</tspan>
+  </text>
+
+  <!-- Pen Nib Icon -->
+  <g transform="translate(512,260)">
+    <path
+      d="M 0 -100 L 60 40 L 0 100 L -60 40 Z"
+      fill="#38BDF8"
+      stroke="#0EA5E9"
+      stroke-width="6"
+    />
+    <circle cx="0" cy="0" r="18" fill="#0F172A" stroke="#E5E7EB" stroke-width="4"/>
+  </g>
+
+  <!-- Loading Dots -->
+  <g transform="translate(512,640)">
+    <circle cx="-40" cy="0" r="10" fill="#38BDF8"/>
+    <circle cx="0" cy="0" r="10" fill="#0EA5E9"/>
+    <circle cx="40" cy="0" r="10" fill="#38BDF8"/>
+  </g>
+</svg>

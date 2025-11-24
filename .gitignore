@@ -1,0 +1,8 @@
+prompts/
+build/
+*.o
+*.bin
+*.elf
+*.iso
+*.log
+*.tmp

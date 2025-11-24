@@ -1,0 +1,34 @@
+# PenOS
+
+PenOS is a compact yet real 32-bit x86 operating system intended for learning and portfolio demonstration. It boots through GRUB, sets up protected mode infrastructure (GDT, IDT, PIC), installs timer + keyboard interrupts, initializes a trivial physical memory manager, identity-maps the first 4 MiB, and exposes a text console plus a blocking shell with a few diagnostic commands.
+
+## Key Features
+
+- Multiboot-compliant loader, custom linker script, and freestanding build with `gcc -m32`.
+- Early CPU init: GDT, IDT, PIC remapping, and interrupt dispatch layer.
+- PIT-driven tick counter and scheduler skeleton hook.
+- Minimal physical memory allocator and paging enablement.
+- PS/2 keyboard driver feeding a command shell.
+- Text-mode console, system info demo app, and branding assets (`penos-boot-splash.svg`, `penos-favicon.svg`).
+
+## Building
+
+Requirements: `gcc` with 32-bit support, `ld`, `grub-mkrescue`, `xorriso`, and `qemu-system-i386`.
+
+```
+make            # builds build/kernel.bin
+make iso        # builds PenOS.iso via grub-mkrescue
+make run        # boots ISO in QEMU
+```
+
+## Running
+
+Boot `PenOS.iso` in QEMU/VirtualBox/VMware or dd it to a USB stick (BIOS mode). The shell supports `help`, `clear`, `echo <text>`, `ticks`, `sysinfo`, and `halt`.
+
+## Documentation
+
+- `docs/architecture.md` - overview of boot -> kernel -> interrupts -> memory -> devices -> shell.
+- `docs/commits/feature-core/1_bootstrap.md` - design log for this snapshot.
+- `docs/versions/v0.1.0.md` - release summary.
+
+Future work (filesystem, networking, GUI, PenScript, etc.) can extend the structured directories already in place.
