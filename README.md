@@ -1,6 +1,8 @@
-# PenOS
+# <img src="penos-favicon.svg" alt="PenOS" style="height: 1em; vertical-align: middle;"> PenOS
 
 PenOS is a compact yet real 32-bit x86 operating system intended for learning and portfolio demonstration. It boots through GRUB, sets up protected mode infrastructure (GDT, IDT, PIC), installs timer + keyboard interrupts, initializes a trivial physical memory manager, identity-maps the first 4 MiB, and exposes a text console plus a blocking shell with a few diagnostic commands.
+
+![JobGenie.ai Demo](penos-boot-splash.svg)
 
 ## Key Features
 
