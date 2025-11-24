@@ -18,7 +18,7 @@ PenOS currently boots through GRUB, which loads `kernel.bin` and hands control t
    - Additional device hooks (mouse, sound, NIC) are intentionally left for future milestones.
 
 4. Kernel services
-   - `sched/sched.c` holds a placeholder task table and exposes hook points used by the timer to eventually trigger round-robin switching.
+   - `sched/sched.c` now implements a round-robin scheduler. Timer interrupts snapshot the active task's `interrupt_frame_t`, pick the next runnable task, and patch the frame so `iret` resumes the chosen thread on its dedicated stack. Demo counter/spinner threads show the preemption in action.
    - `apps/sysinfo.c` demonstrates how subsystems compose: it queries PMM, timer, and scheduler state before printing via the console.
 
 5. UI and shell
@@ -28,7 +28,5 @@ PenOS currently boots through GRUB, which loads `kernel.bin` and hands control t
 ## TODO highlights
 
 - Heap freelist currently lacks trimming back to the PMM; future work could unmap idle pages or add slab allocators.
-- Flesh out `sched_tick` to context switch tasks built from allocated stacks.
-- Extend the shell, add filesystem plus storage drivers, and integrate GUI or framebuffer output.
-- Flesh out `sched_tick` to context switch tasks built from allocated stacks.
+- Flesh out the scheduler to reclaim finished tasks and allow user-created threads.
 - Extend the shell, add filesystem plus storage drivers, and integrate GUI or framebuffer output.

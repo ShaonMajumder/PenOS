@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.4.0
+- Implemented a preemptive round-robin kernel scheduler with dedicated per-task stacks and demo counter/spinner threads.
+
 ## v0.3.1
 - Extended the kernel heap with boundary-tag metadata, freelist search, and real `kfree` plus block coalescing.
 

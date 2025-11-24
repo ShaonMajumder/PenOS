@@ -1,10 +1,7 @@
 # Commit 1 - Higher-half kernel heap
-
-Branch feature/heap off develop, single commit “Wire up higher-half kernel heap”.
-
-Feature summary: reserved a higher-half heap window, implemented a bump allocator backed by PMM/paging, called heap_init during boot, and documented/versioned the change.
-Architecture: HEAP_START=0xC1000000, HEAP_SIZE=16 MiB. kmalloc aligns requests, lazily maps pages via paging_map, and advances heap_curr; kfree remains a stub for future freelist integration.
-Merge back into develop, bumping repo to v0.3.0 with matching CHANGELOG.md, VERSION, docs/versions/v0.3.0.md, and commit doc docs/commits/feature-heap/1_kernel_heap.md.
+**Branch:** feature/heap  \
+**Commit:** "Wire up higher-half kernel heap"  \
+**Summary:** Reserved a higher-half heap window, implemented a bump allocator on top of paging, and logged the new memory story for v0.3.0.
 
 Problem
 : With paging in place, subsystems still lacked a dynamic allocator. `kmalloc` was unavailable, and every feature needing runtime buffers would have to hand-roll fixed arrays.
