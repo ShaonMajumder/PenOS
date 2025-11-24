@@ -27,13 +27,13 @@ make run        # boots ISO in QEMU
 
 ## Running
 
-Boot `PenOS.iso` in QEMU/VirtualBox/VMware or dd it to a USB stick (BIOS mode). The shell supports `help`, `clear`, `echo <text>`, `ticks`, `sysinfo`, and `halt`.
+Boot `PenOS.iso` in QEMU/VirtualBox/VMware or dd it to a USB stick (BIOS mode). The shell supports `help`, `clear`, `echo <text>`, `ticks`, `sysinfo`, `ps`, `spawn <counter|spinner>`, `kill <pid>`, and `halt`.
 
 ## Documentation
 
 - `docs/architecture.md` - overview of boot -> kernel -> interrupts -> memory -> scheduler -> UI.
-- `docs/commits/feature-scheduler/1_preemptive_rr.md` - scheduler design notes.
+- `docs/commits/feature-scheduler/1_preemptive_rr.md` and `docs/commits/feature-scheduler/2_task_lifecycle.md` - scheduler design notes and lifecycle shell APIs.
 - `docs/commits/feature-syscall/1_int80.md` - syscall dispatcher details.
-- `docs/versions/v0.5.0.md` - latest release summary (older versions also retained).
+- `docs/versions/v0.6.0.md` - latest release summary (older versions also retained).
 
 Future work (filesystem, networking, GUI, PenScript, etc.) can extend the structured directories already in place.

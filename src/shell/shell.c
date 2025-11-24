@@ -4,6 +4,7 @@
 #include "arch/x86/timer.h"
 #include "mem/pmm.h"
 #include "apps/sysinfo.h"
+#include "sched/sched.h"
 #include <string.h>
 
 static int getline_block(char *buffer, int max)
@@ -33,7 +34,7 @@ static int getline_block(char *buffer, int max)
 
 static void cmd_help(void)
 {
-    console_write("Commands: help, clear, echo, ticks, sysinfo, halt\n");
+    console_write("Commands: help, clear, echo, ticks, sysinfo, ps, spawn <task>, kill <pid>, halt\n");
 }
 
 static void cmd_echo(const char *args)
@@ -47,6 +48,85 @@ static void cmd_ticks(void)
     console_write("Ticks: ");
     console_write_dec((uint32_t)timer_ticks());
     console_putc('\n');
+}
+
+static void ps_callback(const sched_task_info_t *info)
+{
+    console_write_dec(info->id);
+    if (info->id < 10) {
+        console_write("   ");
+    } else if (info->id < 100) {
+        console_write("  ");
+    } else {
+        console_write(" ");
+    }
+    console_write(sched_state_name(info->state));
+    size_t len = strlen(sched_state_name(info->state));
+    while (len++ < 8) {
+        console_putc(' ');
+    }
+    console_write(info->name);
+    console_putc('\n');
+}
+
+static void cmd_ps(void)
+{
+    console_write("PID  STATE    NAME\n");
+    sched_for_each(ps_callback);
+}
+
+static int parse_uint(const char *str, uint32_t *out)
+{
+    if (!str || !out) {
+        return -1;
+    }
+    uint32_t value = 0;
+    if (*str == '\0') {
+        return -1;
+    }
+    while (*str) {
+        if (*str < '0' || *str > '9') {
+            return -1;
+        }
+        value = value * 10 + (uint32_t)(*str - '0');
+        ++str;
+    }
+    *out = value;
+    return 0;
+}
+
+static void cmd_spawn(const char *args)
+{
+    while (*args == ' ') {
+        ++args;
+    }
+    if (*args == '\0') {
+        console_write("Usage: spawn <counter|spinner>\n");
+        return;
+    }
+    int32_t id = sched_spawn_named(args);
+    if (id < 0) {
+        console_write("spawn failed\n");
+    } else {
+        console_write("Spawned task ");
+        console_write_dec((uint32_t)id);
+        console_putc('\n');
+    }
+}
+
+static void cmd_kill(const char *args)
+{
+    while (*args == ' ') {
+        ++args;
+    }
+    uint32_t pid;
+    if (parse_uint(args, &pid) != 0) {
+        console_write("Usage: kill <pid>\n");
+        return;
+    }
+    if (sched_kill(pid) != 0) {
+        console_write("kill: no such task or protected task\n");
+    }
 }
 
 void shell_run(void)
@@ -68,6 +148,12 @@ void shell_run(void)
             cmd_ticks();
         } else if (!strcmp(input, "sysinfo")) {
             app_sysinfo();
+        } else if (!strcmp(input, "ps")) {
+            cmd_ps();
+        } else if (!strncmp(input, "spawn ", 6)) {
+            cmd_spawn(input + 6);
+        } else if (!strncmp(input, "kill ", 5)) {
+            cmd_kill(input + 5);
         } else if (!strcmp(input, "halt")) {
             break;
         } else {

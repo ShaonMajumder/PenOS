@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.6.0
+- Scheduler now reclaims zombie threads (freeing stacks) and exposes ps/spawn/kill shell commands backed by new lifecycle APIs.
+
 ## v0.5.1
 - Heap now reports usage stats and trims free pages at the higher-half tail, returning frames to the PMM.
 
