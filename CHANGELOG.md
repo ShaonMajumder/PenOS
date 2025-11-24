@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.3.1
+- Extended the kernel heap with boundary-tag metadata, freelist search, and real `kfree` plus block coalescing.
+
 ## v0.3.0
 - Added a higher-half kernel heap: bump allocator backed by paging/PMM with lazy page mapping and `kmalloc` API.
 
