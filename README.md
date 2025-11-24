@@ -12,6 +12,7 @@ PenOS is a compact yet real 32-bit x86 operating system intended for learning an
 - Bitmap-backed physical memory allocator, dynamic paging, and higher-half kernel heap with freelist `kmalloc`/`kfree`.
 - PS/2 keyboard driver feeding a command shell.
 - `int 0x80` syscall dispatcher with `sys_write`/`sys_ticks` entry points for future user tasks.
+- Heap exposes `heap_bytes_in_use/free` stats and trims idle pages back to the PMM.
 - Text-mode console, system info demo app, and branding assets (`penos-boot-splash.svg`, `penos-favicon.svg`).
 
 ## Building

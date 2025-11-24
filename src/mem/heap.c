@@ -21,6 +21,10 @@ static uint32_t heap_curr = HEAP_START;
 static uint32_t heap_mapped_end = HEAP_START;
 static const uint32_t heap_end = HEAP_START + HEAP_SIZE;
 static heap_block_t *heap_head = NULL;
+static size_t allocated_bytes = 0;
+
+static void heap_trim(void);
+static heap_block_t *heap_tail(void);
 
 static inline uint32_t align_up(uint32_t value, uint32_t align)
 {
@@ -108,6 +112,7 @@ void heap_init(void)
     heap_curr = HEAP_START;
     heap_mapped_end = HEAP_START;
     heap_head = NULL;
+    allocated_bytes = 0;
     console_write("Kernel heap ready.\n");
 }
 
@@ -140,6 +145,7 @@ void *kmalloc(size_t size)
         tail->next = block;
         block->prev = tail;
     }
+    allocated_bytes += block->size;
     return (uint8_t *)block + BLOCK_OVERHEAD;
 }
 
@@ -154,5 +160,61 @@ void kfree(void *ptr)
         return;
     }
     block->free = 1;
+    allocated_bytes -= block->size;
     coalesce(block);
+    heap_trim();
+}
+
+size_t heap_bytes_in_use(void)
+{
+    return allocated_bytes;
+}
+
+size_t heap_bytes_free(void)
+{
+    return (size_t)(heap_mapped_end - HEAP_START) - allocated_bytes;
+}
+
+static heap_block_t *heap_tail(void)
+{
+    heap_block_t *tail = heap_head;
+    if (!tail) {
+        return NULL;
+    }
+    while (tail->next) {
+        tail = tail->next;
+    }
+    return tail;
+}
+
+static void heap_trim(void)
+{
+    while (1) {
+        heap_block_t *tail = heap_tail();
+        if (!tail) {
+            heap_curr = HEAP_START;
+            break;
+        }
+        uint32_t tail_start = (uint32_t)tail;
+        if (!tail->free) {
+            heap_curr = tail_start + BLOCK_OVERHEAD + tail->size;
+            break;
+        }
+        if (tail->prev) {
+            tail->prev->next = NULL;
+        } else {
+            heap_head = NULL;
+        }
+        heap_curr = tail_start;
+    }
+
+    uint32_t target = align_up(heap_curr, PAGE_SIZE);
+    while (heap_mapped_end > target) {
+        heap_mapped_end -= PAGE_SIZE;
+        uint32_t phys = paging_virt_to_phys(heap_mapped_end);
+        paging_unmap(heap_mapped_end);
+        if (phys) {
+            pmm_free_frame(phys);
+        }
+    }
 }

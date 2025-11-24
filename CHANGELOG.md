@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.5.1
+- Heap now reports usage stats and trims free pages at the higher-half tail, returning frames to the PMM.
+
 ## v0.5.0
 - Added an `int 0x80` syscall dispatcher with `sys_write` and `sys_ticks`, plus cleaned up PIC EOIs for software interrupts.
 
