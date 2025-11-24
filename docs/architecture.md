@@ -19,6 +19,7 @@ PenOS currently boots through GRUB, which loads `kernel.bin` and hands control t
 
 4. Kernel services
    - `sched/sched.c` now implements a round-robin scheduler. Timer interrupts snapshot the active task's `interrupt_frame_t`, pick the next runnable task, and patch the frame so `iret` resumes the chosen thread on its dedicated stack. Demo counter/spinner threads show the preemption in action.
+   - `sys/syscall.c` registers an `int 0x80` handler that decodes syscall numbers (EAX) and arguments (EBX/ECX/EDX). Early syscalls cover console write and querying the PIT tick counter.
    - `apps/sysinfo.c` demonstrates how subsystems compose: it queries PMM, timer, and scheduler state before printing via the console.
 
 5. UI and shell
@@ -30,3 +31,4 @@ PenOS currently boots through GRUB, which loads `kernel.bin` and hands control t
 - Heap freelist currently lacks trimming back to the PMM; future work could unmap idle pages or add slab allocators.
 - Flesh out the scheduler to reclaim finished tasks and allow user-created threads.
 - Extend the shell, add filesystem plus storage drivers, and integrate GUI or framebuffer output.
+- Expand the syscall table (and eventually raise the gate's DPL) so ring-3 processes can invoke richer kernel services.

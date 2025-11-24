@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.5.0
+- Added an `int 0x80` syscall dispatcher with `sys_write` and `sys_ticks`, plus cleaned up PIC EOIs for software interrupts.
+
 ## v0.4.0
 - Implemented a preemptive round-robin kernel scheduler with dedicated per-task stacks and demo counter/spinner threads.
 

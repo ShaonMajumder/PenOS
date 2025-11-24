@@ -15,7 +15,7 @@ DECL_ISR(15); DECL_ISR(16); DECL_ISR(17); DECL_ISR(18); DECL_ISR(19);
 DECL_ISR(32); DECL_ISR(33); DECL_ISR(34); DECL_ISR(35); DECL_ISR(36);
 DECL_ISR(37); DECL_ISR(38); DECL_ISR(39); DECL_ISR(40); DECL_ISR(41);
 DECL_ISR(42); DECL_ISR(43); DECL_ISR(44); DECL_ISR(45); DECL_ISR(46);
-DECL_ISR(47);
+DECL_ISR(47); DECL_ISR(128);
 #undef DECL_ISR
 
 static void set_gate(uint8_t vec, void (*handler)(void))
@@ -62,6 +62,7 @@ void interrupt_init(void)
     set_gate(45, isr45);
     set_gate(46, isr46);
     set_gate(47, isr47);
+    set_gate(128, isr128);
 }
 
 void register_interrupt_handler(uint8_t n, isr_t handler)
@@ -109,9 +110,7 @@ void isr_dispatch(interrupt_frame_t *frame)
         handlers[int_no](frame);
     }
 
-    if (int_no >= 40) {
-        pic_send_eoi(int_no - 32);
-    } else if (int_no >= 32) {
+    if (int_no >= 32 && int_no <= 47) {
         pic_send_eoi(int_no - 32);
     }
 }
