@@ -52,6 +52,7 @@ X(44, isr44)
 X(45, isr45)
 X(46, isr46)
 X(47, isr47)
+X(128, isr128)
 #undef X
 
 ISR_NOERR(0)
@@ -90,6 +91,7 @@ ISR_NOERR(44)
 ISR_NOERR(45)
 ISR_NOERR(46)
 ISR_NOERR(47)
+ISR_NOERR(128)
 
 isr_common_stub:
     pusha

@@ -8,7 +8,9 @@
 #include "drivers/keyboard.h"
 #include "mem/pmm.h"
 #include "mem/paging.h"
+#include "mem/heap.h"
 #include "sched/sched.h"
+#include "sys/syscall.h"
 #include "shell/shell.h"
 #include "apps/sysinfo.h"
 
@@ -37,7 +39,9 @@ void kernel_main(uint32_t magic, multiboot_info_t *mb_info)
     timer_init(100);
     pmm_init(mb_info);
     paging_init();
+    heap_init();
     keyboard_init();
+    syscall_init();
     sched_init();
 
     console_write("Initialization complete. Enabling interrupts...\n");

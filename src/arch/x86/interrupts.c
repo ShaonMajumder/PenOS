@@ -9,14 +9,43 @@
 static isr_t handlers[256];
 
 #define DECL_ISR(n) extern void isr##n(void)
-DECL_ISR(0); DECL_ISR(1); DECL_ISR(2); DECL_ISR(3); DECL_ISR(4);
-DECL_ISR(5); DECL_ISR(6); DECL_ISR(7); DECL_ISR(8); DECL_ISR(9);
-DECL_ISR(10); DECL_ISR(11); DECL_ISR(12); DECL_ISR(13); DECL_ISR(14);
-DECL_ISR(15); DECL_ISR(16); DECL_ISR(17); DECL_ISR(18); DECL_ISR(19);
-DECL_ISR(32); DECL_ISR(33); DECL_ISR(34); DECL_ISR(35); DECL_ISR(36);
-DECL_ISR(37); DECL_ISR(38); DECL_ISR(39); DECL_ISR(40); DECL_ISR(41);
-DECL_ISR(42); DECL_ISR(43); DECL_ISR(44); DECL_ISR(45); DECL_ISR(46);
-DECL_ISR(47); DECL_ISR(128);
+DECL_ISR(0);
+DECL_ISR(1);
+DECL_ISR(2);
+DECL_ISR(3);
+DECL_ISR(4);
+DECL_ISR(5);
+DECL_ISR(6);
+DECL_ISR(7);
+DECL_ISR(8);
+DECL_ISR(9);
+DECL_ISR(10);
+DECL_ISR(11);
+DECL_ISR(12);
+DECL_ISR(13);
+DECL_ISR(14);
+DECL_ISR(15);
+DECL_ISR(16);
+DECL_ISR(17);
+DECL_ISR(18);
+DECL_ISR(19);
+DECL_ISR(32);
+DECL_ISR(33);
+DECL_ISR(34);
+DECL_ISR(35);
+DECL_ISR(36);
+DECL_ISR(37);
+DECL_ISR(38);
+DECL_ISR(39);
+DECL_ISR(40);
+DECL_ISR(41);
+DECL_ISR(42);
+DECL_ISR(43);
+DECL_ISR(44);
+DECL_ISR(45);
+DECL_ISR(46);
+DECL_ISR(47);
+DECL_ISR(128);
 #undef DECL_ISR
 
 static void set_gate(uint8_t vec, void (*handler)(void))
@@ -93,27 +122,30 @@ static const char *exception_messages[] = {
     "Coprocessor Fault",
     "Alignment Check",
     "Machine Check",
-    "Reserved"
-};
+    "Reserved"};
 
 void isr_dispatch(interrupt_frame_t *frame)
 {
     uint8_t int_no = frame->int_no;
 
-    if (int_no < 20) {
+    if (int_no < 20)
+    {
         console_write("Exception: ");
         console_write(exception_messages[int_no]);
         console_write("\nSystem halted.\n");
-        for (;;) {
-            __asm__ volatile ("cli; hlt");
+        for (;;)
+        {
+            __asm__ volatile("cli; hlt");
         }
     }
 
-    if (handlers[int_no]) {
+    if (handlers[int_no])
+    {
         handlers[int_no](frame);
     }
 
-    if (int_no >= 32 && int_no <= 47) {
+    if (int_no >= 32 && int_no <= 47)
+    {
         pic_send_eoi(int_no - 32);
     }
 }

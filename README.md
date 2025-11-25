@@ -11,6 +11,7 @@ PenOS is a compact yet real 32-bit x86 operating system intended for learning an
 - PIT-driven tick counter driving a preemptive round-robin scheduler with demo counter/spinner threads.
 - Bitmap-backed physical memory allocator, dynamic paging, and higher-half kernel heap with freelist `kmalloc`/`kfree`.
 - PS/2 keyboard and mouse drivers feeding the kernel (mouse updates logged for future GUI work).
+- PS/2 keyboard driver feeding a command shell.
 - `int 0x80` syscall dispatcher with `sys_write`/`sys_ticks` entry points for future user tasks.
 - Heap exposes `heap_bytes_in_use/free` stats and trims idle pages back to the PMM.
 - Text-mode console, system info demo app, and branding assets (`penos-boot-splash.svg`, `penos-favicon.svg`).
@@ -34,6 +35,9 @@ Boot `PenOS.iso` in QEMU/VirtualBox/VMware or dd it to a USB stick (BIOS mode). 
 - `docs/architecture.md` - overview of boot -> kernel -> interrupts -> memory -> scheduler -> UI.
 - `docs/commits/feature-scheduler/1_preemptive_rr.md` and `docs/commits/feature-scheduler/2_task_lifecycle.md` - scheduler design notes and lifecycle shell APIs.
 - `docs/commits/feature-syscall/1_int80.md` - syscall dispatcher details.
-- `docs/versions/v0.7.0.md` - latest release summary (older versions also retained).
+  <<<<<<< HEAD
+- # `docs/versions/v0.7.0.md` - latest release summary (older versions also retained).
+- `docs/versions/v0.6.0.md` - latest release summary (older versions also retained).
+  > > > > > > > feature/task-lifecycle
 
 Future work (filesystem, networking, GUI, PenScript, etc.) can extend the structured directories already in place.
