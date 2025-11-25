@@ -14,7 +14,7 @@ PenOS currently boots through GRUB, which loads `kernel.bin` and hands control t
 
 3. Devices and drivers
    - The keyboard driver registers on IRQ1, translating set-1 scancodes into ASCII and buffering them for consumers (the shell).
-   - Additional device hooks (mouse, sound, NIC) are intentionally left for future milestones.
+   - The mouse driver enables the PS/2 auxiliary port, captures 3-byte packets on IRQ12, updates an internal state struct (delta + button mask), and currently logs movements for debugging; this same state will feed a future GUI or input subsystem.
 
 4. Kernel services
    - `sched/sched.c` holds a placeholder task table and exposes hook points used by the timer to eventually trigger round-robin switching.
