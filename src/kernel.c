@@ -23,6 +23,7 @@ static void banner(void)
 void kernel_main(uint32_t magic, multiboot_info_t *mb_info)
 {
     console_init();
+    console_show_boot_splash();
     banner();
 
     if (magic != 0x2BADB002) {

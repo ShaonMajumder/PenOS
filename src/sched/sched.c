@@ -43,9 +43,6 @@ void sched_init(void)
     active_tasks = 1;
     current_index = 0;
     console_write("Scheduler initialized.\n");
-
-    sched_spawn_named("counter");
-    sched_spawn_named("spinner");
 }
 
 static int32_t spawn_task(void (*entry)(void), const char *name)

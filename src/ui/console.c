@@ -101,3 +101,25 @@ void console_write_dec(uint32_t v)
         console_putc(buf[i]);
     }
 }
+
+void console_show_boot_splash(void)
+{
+    static const char *lines[] = {
+        "",
+        "                       ____             _   ____   _____  _____ ",
+        "                      |  _ \\ ___  _ __| |_|  _ \\ / _ \\ \\/ / _ \\",
+        "                      | |_) / _ \\| '__| __| |_) | | | \\  / | | |",
+        "                      |  __/ (_) | |  | |_|  __/| |_| /  \\ |_| |",
+        "                      |_|   \\___/|_|   \\__|_|    \\___/_/\\_\\___/",
+        "",
+        "                           PenOS :: Minimal 32-bit Kernel",
+        "                 Assembly-grade playground for paging | drivers | tasks",
+        "------------------------------------------------------------------------------",
+        ""
+    };
+    console_clear();
+    for (size_t i = 0; i < sizeof(lines) / sizeof(lines[0]); ++i) {
+        console_write(lines[i]);
+        console_putc('\n');
+    }
+}
