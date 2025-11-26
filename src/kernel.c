@@ -1,12 +1,13 @@
 #include "kernel.h"
 #include "ui/console.h"
-#include "ui/framebuffer.h"
+#include "ui/fb.h"
 #include "arch/x86/gdt.h"
 #include "arch/x86/idt.h"
 #include "arch/x86/interrupts.h"
 #include "arch/x86/timer.h"
 #include "arch/x86/pic.h"
 #include "drivers/keyboard.h"
+#include "drivers/mouse.h"
 #include "mem/pmm.h"
 #include "mem/paging.h"
 #include "mem/heap.h"
@@ -14,6 +15,7 @@
 #include "sys/syscall.h"
 #include "shell/shell.h"
 #include "apps/sysinfo.h"
+#include "ui/desktop.h"
 
 #ifndef PENOS_VERSION
 #define PENOS_VERSION "dev"
@@ -28,8 +30,7 @@ static void banner(void)
 void kernel_main(uint32_t magic, multiboot_info_t *mb_info)
 {
     if (magic == 0x2BADB002) {
-        framebuffer_init(mb_info);
-        framebuffer_console_configure(80, 25);
+        fb_init(mb_info);
     }
 
     console_init();
@@ -52,11 +53,16 @@ void kernel_main(uint32_t magic, multiboot_info_t *mb_info)
     paging_init();
     heap_init();
     keyboard_init();
+    mouse_init();
     syscall_init();
     sched_init();
 
     console_write("Initialization complete. Enabling interrupts...\n");
     __asm__ volatile ("sti");
+
+    if (fb_present()) {
+        desktop_start();
+    }
 
     shell_run();
 

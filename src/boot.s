@@ -1,6 +1,7 @@
 .set ALIGN,    1<<0
 .set MEMINFO,  1<<1
-.set FLAGS,    ALIGN | MEMINFO
+.set VIDEO,    1<<2
+.set FLAGS,    ALIGN | MEMINFO | VIDEO
 .set MAGIC,    0x1BADB002
 .set CHECKSUM, -(MAGIC + FLAGS)
 
@@ -9,6 +10,10 @@
     .long MAGIC
     .long FLAGS
     .long CHECKSUM
+    .long 1          # request linear framebuffer
+    .long 1024       # width
+    .long 768        # height
+    .long 32         # bpp
 
 .section .text
 .global start

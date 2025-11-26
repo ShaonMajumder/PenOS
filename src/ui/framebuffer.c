@@ -181,10 +181,11 @@ static void framebuffer_draw_glyph(uint32_t x, uint32_t y, char c, uint32_t fg, 
     }
     for (uint32_t row = 0; row < 8; ++row) {
         uint8_t bits = glyph[row];
+        uint32_t py = y + row * scale;
         for (uint32_t col = 0; col < 8; ++col) {
-            uint32_t color = (bits & (1u << col)) ? fg : bg;
+            uint32_t mask = 0x80u >> col; /* leftmost bit corresponds to col 0 */
+            uint32_t color = (bits & mask) ? fg : bg;
             uint32_t px = x + col * scale;
-            uint32_t py = y + row * scale;
             for (uint32_t dy = 0; dy < scale; ++dy) {
                 for (uint32_t dx = 0; dx < scale; ++dx) {
                     framebuffer_draw_pixel(px + dx, py + dy, color);

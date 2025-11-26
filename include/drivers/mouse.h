@@ -8,7 +8,10 @@ typedef struct {
     uint8_t buttons; /* bit0=left, bit1=right, bit2=middle */
 } mouse_state_t;
 
+typedef void (*mouse_handler_t)(int dx, int dy, uint8_t buttons);
+
 void mouse_init(void);
 void mouse_get_state(mouse_state_t *out);
+void mouse_set_handler(mouse_handler_t handler);
 
 #endif

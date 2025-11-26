@@ -6,6 +6,7 @@
 #include "apps/sysinfo.h"
 #include "sched/sched.h"
 #include "sys/power.h"
+#include "ui/desktop.h"
 #include <string.h>
 
 typedef struct {
@@ -96,7 +97,12 @@ static int getline_block(char *buffer, int max)
 
 static void cmd_help(void)
 {
-    console_write("Commands: help, clear, echo, ticks, sysinfo, ps, spawn <task>, kill <pid>, halt, shutdown\n");
+    console_write("Commands: help, clear, echo, ticks, sysinfo, ps, spawn <task>, kill <pid>, gui, halt, shutdown\n");
+}
+
+static void cmd_gui(void)
+{
+    desktop_start();
 }
 
 static void cmd_echo(const char *args)
@@ -219,6 +225,8 @@ void shell_run(void)
             cmd_spawn(input + 6);
         } else if (!strncmp(input, "kill ", 5)) {
             cmd_kill(input + 5);
+        } else if (!strcmp(input, "gui")) {
+            cmd_gui();
         } else if (!strcmp(input, "halt")) {
             break;
         } else if (!strcmp(input, "shutdown")) {

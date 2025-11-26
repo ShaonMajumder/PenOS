@@ -13,6 +13,7 @@
 static volatile mouse_state_t g_state;
 static int packet_index = 0;
 static uint8_t packet[3];
+static mouse_handler_t g_handler = NULL;
 
 static void mouse_wait(uint8_t type)
 {
@@ -46,15 +47,6 @@ static uint8_t mouse_read(void)
     return inb(PS2_DATA);
 }
 
-static void print_signed(int32_t v)
-{
-    if (v < 0) {
-        console_putc('-');
-        v = -v;
-    }
-    console_write_dec((uint32_t)v);
-}
-
 static void mouse_handle_packet(void)
 {
     int dx = (int8_t)packet[1];
@@ -63,13 +55,9 @@ static void mouse_handle_packet(void)
     g_state.y -= dy;
     g_state.buttons = packet[0] & 0x07;
 
-    console_write("[mouse] x=");
-    print_signed(g_state.x);
-    console_write(" y=");
-    print_signed(g_state.y);
-    console_write(" btn=");
-    console_write_dec(g_state.buttons);
-    console_write("\n");
+    if (g_handler) {
+        g_handler(dx, -dy, g_state.buttons);
+    }
 }
 
 static void mouse_irq(interrupt_frame_t *frame)
@@ -87,6 +75,7 @@ void mouse_init(void)
 {
     memset((void *)&g_state, 0, sizeof(g_state));
     packet_index = 0;
+    g_handler = NULL;
 
     mouse_wait(1);
     outb(PS2_CMD, 0xA8);
@@ -117,4 +106,9 @@ void mouse_get_state(mouse_state_t *out)
         return;
     }
     *out = g_state;
+}
+
+void mouse_set_handler(mouse_handler_t handler)
+{
+    g_handler = handler;
 }
