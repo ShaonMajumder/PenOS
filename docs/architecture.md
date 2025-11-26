@@ -15,7 +15,7 @@ PenOS currently boots through GRUB, which loads `kernel.bin` and hands control t
    - `heap_init` reserves a 16 MiB higher-half window (starting at 0xC1000000) and manages it via a doubly-linked free list with boundary tags; `kmalloc` splits free blocks and maps additional pages lazily, while `kfree` returns blocks to the list, coalesces neighbors, and (via tail trimming) unmaps idle pages so frames go back to the PMM. `heap_bytes_in_use/free` supply quick diagnostics.
 
 3. Devices and drivers
-   - The keyboard driver registers on IRQ1, translating set-1 scancodes into ASCII and buffering them for consumers (the shell).
+   - The keyboard driver registers on IRQ1, translating set-1 scancodes into ASCII, emitting `\n` for Enter so shell submissions complete, and handing the console real backspace characters so editing works before buffering data for the shell.
    - The mouse driver enables the PS/2 auxiliary port, captures 3-byte packets on IRQ12, updates an internal state struct (delta + button mask), and currently logs movements for debugging; this same state will feed a future GUI or input subsystem.
 
 4. Kernel services
