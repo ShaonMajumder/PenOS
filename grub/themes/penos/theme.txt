@@ -1,0 +1,23 @@
+desktop-image: "penos-boot-splash.png"
+desktop-color: "#05060a"
+title-text: "PenOS"
+title-color: "#f0f6ff"
+terminal-color: "#eaeaea"
+terminal-border: "0"
+terminal-position: "60% 20%"
+
+menu {
+    left = 35%
+    top = 60%
+    width = 30%
+    height = 15%
+    item_height = 28
+    item_padding = 6
+    icon_width = 0
+    icon_height = 0
+    fg = "#f0f0f0"
+    bg = "#000000a6"
+    hl_fg = "#060606"
+    hl_bg = "#54f2c5"
+    bd_color = "#000000"
+}

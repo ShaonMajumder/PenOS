@@ -3,6 +3,7 @@
 PenOS currently boots through GRUB, which loads `kernel.bin` and hands control to `start` in `src/boot.s`. The assembly stub builds a stack and calls `kernel_main`, entering C in 32-bit protected mode.
 
 1. CPU bring-up
+   - The GRUB ISO uses a themed boot menu stored under `grub/themes/penos`; it sets `gfxmode=1024x768`, loads a rasterized PenOS splash (`penos-boot-splash.png`), and hands off to the kernel entry once the user picks the single boot entry.
    - `gdt_init` loads a flat descriptor table via `gdt_flush`.
    - `idt_init` clears the descriptor table, while `interrupt_init` wires exception and IRQ stubs generated in `src/arch/x86/isr_stubs.S`.
    - The PIC is remapped to vectors 32-47 in `pic_remap` to avoid clashing with CPU exceptions.

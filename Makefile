@@ -29,10 +29,11 @@ $(BUILD)/%.o: src/%.s
 $(BUILD)/kernel.bin: $(OBJS)
 	$(LD) $(LDFLAGS) -o $@ $(OBJS)
 
-iso: $(BUILD)/kernel.bin grub/grub.cfg
+iso: $(BUILD)/kernel.bin grub/grub.cfg grub/themes/penos/theme.txt grub/themes/penos/penos-boot-splash.png
 	@mkdir -p $(BUILD)/iso/boot/grub
 	cp $(BUILD)/kernel.bin $(BUILD)/iso/boot/kernel.bin
 	cp grub/grub.cfg $(BUILD)/iso/boot/grub/grub.cfg
+	if [ -d grub/themes ]; then cp -r grub/themes $(BUILD)/iso/boot/grub/; fi
 	grub-mkrescue -o PenOS.iso $(BUILD)/iso
 
 run: all
