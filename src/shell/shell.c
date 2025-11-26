@@ -7,6 +7,59 @@
 #include "sched/sched.h"
 #include <string.h>
 
+typedef struct {
+    uint32_t *ids;
+    size_t capacity;
+    size_t count;
+} demo_kill_ctx_t;
+
+static demo_kill_ctx_t *demo_ctx = NULL;
+
+static void collect_demo_tasks(const sched_task_info_t *info)
+{
+    if (!demo_ctx || !info) {
+        return;
+    }
+    if (!strcmp(info->name, "spinner") || !strcmp(info->name, "counter")) {
+        if (demo_ctx->count < demo_ctx->capacity) {
+            demo_ctx->ids[demo_ctx->count++] = info->id;
+        }
+    }
+}
+
+static size_t shell_stop_demo_tasks(void)
+{
+    uint32_t ids[8];
+    demo_kill_ctx_t ctx = {
+        .ids = ids,
+        .capacity = sizeof(ids) / sizeof(ids[0]),
+        .count = 0
+    };
+    demo_ctx = &ctx;
+    sched_for_each(collect_demo_tasks);
+    demo_ctx = NULL;
+    for (size_t i = 0; i < ctx.count; ++i) {
+        sched_kill(ctx.ids[i]);
+    }
+    return ctx.count;
+}
+
+static void shell_handle_break(const char *label)
+{
+    if (label && *label) {
+        console_write(label);
+    }
+    console_putc('\n');
+    size_t stopped = shell_stop_demo_tasks();
+    if (stopped > 0) {
+        console_write("[shell] stopped ");
+        console_write_dec((uint32_t)stopped);
+        console_write(" demo task(s)\n");
+    } else {
+        console_write("[shell] no demo tasks to stop\n");
+    }
+}
+
 static int getline_block(char *buffer, int max)
 {
     int len = 0;
@@ -23,6 +76,14 @@ static int getline_block(char *buffer, int max)
                 len--;
                 console_write("\b \b");
             }
+        } else if (ch == 27) {
+            buffer[0] = '\0';
+            shell_handle_break("[ESC]");
+            return -1;
+        } else if (ch == 3) {
+            buffer[0] = '\0';
+            shell_handle_break("^C");
+            return -1;
         } else {
             buffer[len++] = ch;
             console_putc(ch);
@@ -134,7 +195,10 @@ void shell_run(void)
     char input[128];
     while (1) {
         console_write("PenOS> ");
-        getline_block(input, sizeof(input));
+        int len = getline_block(input, sizeof(input));
+        if (len < 0) {
+            continue;
+        }
         if (input[0] == '\0') {
             continue;
         }

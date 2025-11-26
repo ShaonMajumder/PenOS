@@ -15,7 +15,7 @@ PenOS currently boots through GRUB, which loads `kernel.bin` and hands control t
    - `heap_init` reserves a 16 MiB higher-half window (starting at 0xC1000000) and manages it via a doubly-linked free list with boundary tags; `kmalloc` splits free blocks and maps additional pages lazily, while `kfree` returns blocks to the list, coalesces neighbors, and (via tail trimming) unmaps idle pages so frames go back to the PMM. `heap_bytes_in_use/free` supply quick diagnostics.
 
 3. Devices and drivers
-   - The keyboard driver registers on IRQ1, translating set-1 scancodes into ASCII, emitting `\n` for Enter so shell submissions complete, and handing the console real backspace characters so editing works before buffering data for the shell.
+   - The keyboard driver registers on IRQ1, translating set-1 scancodes into ASCII, emitting `\n` for Enter so shell submissions complete, and handing the console real backspace characters plus Ctrl-modified codes (e.g., `Ctrl+C` -> ETX) so higher layers can implement interactive shortcuts.
    - The mouse driver enables the PS/2 auxiliary port, captures 3-byte packets on IRQ12, updates an internal state struct (delta + button mask), and currently logs movements for debugging; this same state will feed a future GUI or input subsystem.
 
 4. Kernel services
@@ -25,7 +25,7 @@ PenOS currently boots through GRUB, which loads `kernel.bin` and hands control t
 
 5. UI and shell
    - `ui/console.c` provides a VGA text console with scrolling, cursor management, and a branded ASCII splash helper that is shown once per boot.
-   - `shell/shell.c` blocks on keyboard input, tokenizes simple commands, and now offers task management (`ps`, `spawn <counter|spinner>`, `kill <pid>`) in addition to the diagnostic commands. Because demo tasks are opt-in, the shell prompt is quiet until the user launches them.
+   - `shell/shell.c` blocks on keyboard input, tokenizes simple commands, and now offers task management (`ps`, `spawn <counter|spinner>`, `kill <pid>`) in addition to the diagnostic commands. Because demo tasks are opt-in, the shell prompt is quiet until the user launches them, and users can press `ESC`/`Ctrl+C` to stop the spinner/counter demo threads without typing `kill`.
 
 ## TODO highlights
 
