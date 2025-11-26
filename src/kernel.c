@@ -1,5 +1,6 @@
 #include "kernel.h"
 #include "ui/console.h"
+#include "ui/framebuffer.h"
 #include "arch/x86/gdt.h"
 #include "arch/x86/idt.h"
 #include "arch/x86/interrupts.h"
@@ -14,6 +15,10 @@
 #include "shell/shell.h"
 #include "apps/sysinfo.h"
 
+#ifndef PENOS_VERSION
+#define PENOS_VERSION "dev"
+#endif
+
 static void banner(void)
 {
     console_write("PenOS :: Minimal 32-bit kernel\n");
@@ -22,16 +27,21 @@ static void banner(void)
 
 void kernel_main(uint32_t magic, multiboot_info_t *mb_info)
 {
-    console_init();
-    console_show_boot_splash();
-    banner();
+    if (magic == 0x2BADB002) {
+        framebuffer_init(mb_info);
+        framebuffer_console_configure(80, 25);
+    }
 
+    console_init();
     if (magic != 0x2BADB002) {
         console_write("Invalid multiboot magic!\n");
         for (;;) {
             __asm__ volatile ("hlt");
         }
     }
+
+    console_show_boot_splash(PENOS_VERSION);
+    banner();
 
     gdt_init();
     idt_init();

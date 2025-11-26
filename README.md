@@ -1,8 +1,18 @@
 # <img src="penos-favicon.svg" alt="PenOS" style="height: 1em; vertical-align: middle;"> PenOS
 
-PenOS is a compact yet real 32-bit x86 operating system intended for learning and portfolio demonstrations. GRUB loads a Multiboot-compliant kernel that brings up protected-mode infrastructure, configures paging and heaps in the higher half, enables interrupts, shows a branded ASCII splash inspired by penos-boot-splash.svg, and drops you at a quiet text-mode shell. Demo tasks (counter/spinner) are opt-in via shell commands so the default console stays calm.
+PenOS is our own 32-bit x86 kernel, built from scratch and booted via GRUB. A custom assembly stub in `src/boot.s` brings the CPU into protected mode and hands off to `kernel_main`, where each subsystem is staged predictably:
 
-Before the kernel runs, GRUB now renders a themed 1024×768 splash that uses a rasterized export of `penos-boot-splash.svg` (`grub/themes/penos/penos-boot-splash.png`). Update that PNG with `python -m pip install --user cairosvg` followed by `cairosvg penos-boot-splash.svg -o grub/themes/penos/penos-boot-splash.png -W 1024 -H 768` (or any vector tool) whenever you tweak the SVG so the bootloader and kernel splashes stay in sync.
+- **CPU & Interrupt Stack:** flat GDT/IDT tables, PIC remap, PIT timer, and shared ISR stubs keep exceptions and timer IRQs under control.
+- **Memory Core:** bitmap physical allocator, higher-half paging with a recursive mapping slot, and a freelist-based kernel heap carve out RAM safely.
+- **Scheduler & Tasks:** a preemptive round-robin scheduler plus lifecycle tracking powers demo workloads launched from the shell.
+- **Drivers & Syscalls:** PS/2 keyboard and mouse drivers plus an `int 0x80` syscall gate expose essential I/O and diagnostics.
+- **UI Path:** VGA console with a Multiboot framebuffer renderer gives us a PenOS splash/logo, console overlay, and modern-feeling shell even on bare metal QEMU/VirtualBox.
+
+For recruiters or non-OS folks, PenOS is a portfolio-ready OS that boots, shows a graphical splash, and provides an interactive shell while demonstrating low-level mastery. Technical reviewers get a clean modular tree (`arch`, `mem`, `drivers`, `sched`, `shell`, `ui`), a `make` pipeline that emits a themed ISO, and extensive documentation (`docs/architecture.md`, per-feature commit write-ups). Marketers can pitch it as “branded polish uncommon in hobby kernels,” “full-stack mastery from bootloader to GUI-ready framebuffer,” and “a launchpad for upcoming filesystem, networking, and PenScript work” that’s already mapped out in the roadmap.
+
+PenOS remains a compact yet real operating system intended for learning and portfolio demonstrations. GRUB loads a Multiboot-compliant kernel that brings up protected-mode infrastructure, configures paging and heaps in the higher half, enables interrupts, keeps the GRUB-provided 1024x768x32 framebuffer alive, renders a gradient PenOS splash/logo, and still drops you at a quiet text-mode shell that now sits inside a tinted overlay. Demo tasks (counter/spinner) are opt-in via shell commands so the default console stays calm in both the framebuffer and VGA fallbacks.
+
+Before the kernel runs, GRUB renders a themed 1024x768 splash that uses a rasterized export of `penos-boot-splash.svg` (`grub/themes/penos/penos-boot-splash.png`). The kernel's framebuffer splash is derived from the same palette and appears immediately after GRUB hands off control, creating a seamless boot experience. Update that PNG with `python -m pip install --user cairosvg` followed by `cairosvg penos-boot-splash.svg -o grub/themes/penos/penos-boot-splash.png -W 1024 -H 768` (or any vector tool) whenever you tweak the SVG so the bootloader, kernel splash, and docs stay in sync.
 
 ![Boot splash](penos-boot-splash.svg)
 
@@ -18,7 +28,7 @@ make run        # boot the ISO in QEMU
 
 `make iso` copies the PenOS kernel plus the GRUB theme assets (`grub/themes/penos/`) so the bootloader shows the graphical splash automatically. If you update the PNG, rerun `make iso` to bake it into `PenOS.iso`.
 
-Boot `PenOS.iso` in QEMU/VirtualBox/VMware or dd it to a BIOS-capable USB stick. The flow is splash -> init log -> `PenOS>` prompt. Shell commands: `help`, `clear`, `echo <text>`, `ticks`, `sysinfo`, `ps`, `spawn <counter|spinner>`, `kill <pid>`, `halt`. Use `spawn ...` when you want the preemptive demo threads to emit `[counter] tick N` or spinner glyphs; by default there is no background chatter. Tap `ESC` or `Ctrl+C` at any prompt to instantly stop the demo tasks without typing `kill`.
+Boot `PenOS.iso` in QEMU/VirtualBox/VMware or dd it to a BIOS-capable USB stick. The flow is bootloader splash -> framebuffer splash/overlay -> init log -> `PenOS>` prompt. Shell commands: `help`, `clear`, `echo <text>`, `ticks`, `sysinfo`, `ps`, `spawn <counter|spinner>`, `kill <pid>`, `halt`, `shutdown`. Use `spawn ...` when you want the preemptive demo threads to emit `[counter] tick N` or spinner glyphs; by default there is no background chatter. Tap `ESC` or `Ctrl+C` at any prompt to instantly stop the demo tasks without typing `kill`, and run `shutdown` to power off QEMU/VirtualBox/Bochs cleanly.
 
 ## Feature Map
 
@@ -29,8 +39,8 @@ Boot `PenOS.iso` in QEMU/VirtualBox/VMware or dd it to a BIOS-capable USB stick.
 | Interrupts & scheduler | Shared ISR stubs, `interrupt_frame_t` contract, timer-driven preemptive round robin, zombie reaping + task APIs | [`docs/architecture.md`](docs/architecture.md#1-cpu-bring-up), [`docs/commits/feature-scheduler/1_preemptive_rr.md`](docs/commits/feature-scheduler/1_preemptive_rr.md), [`docs/commits/feature-scheduler/2_task_lifecycle.md`](docs/commits/feature-scheduler/2_task_lifecycle.md) | `src/arch/x86/isr_stubs.S`, `src/arch/x86/interrupts.c`, `src/sched/sched.c` |
 | Device drivers | PS/2 keyboard buffering for shell input (Enter -> newline, Backspace erases, and Ctrl combos emit control codes so `Ctrl+C` interrupts demo tasks), PS/2 mouse streaming with position logs for future GUI work | [`docs/architecture.md`](docs/architecture.md#3-devices-and-drivers), [`docs/commits/feature-mouse/1_ps2_mouse.md`](docs/commits/feature-mouse/1_ps2_mouse.md), [`docs/versions/v0.7.0.md`](docs/versions/v0.7.0.md) | `src/drivers/keyboard.c`, `src/drivers/mouse.c`, `src/arch/x86/pic.c` |
 | Kernel services | `int 0x80` syscall dispatcher (`sys_write`, `sys_ticks`), system info demo app, scheduler/shell integration | [`docs/architecture.md`](docs/architecture.md#4-kernel-services), [`docs/commits/feature-syscall/1_int80.md`](docs/commits/feature-syscall/1_int80.md) | `src/sys/syscall.c`, `src/apps/sysinfo.c` |
-| UI + shell | VGA text console, one-shot PenOS splash, quiet prompt, blocking shell with task management + opt-in demo threads | [`docs/architecture.md`](docs/architecture.md#5-ui-and-shell) | `src/ui/console.c`, `src/shell/shell.c` |
-| Diagnostics & releases | Versioned change logs, docs index, branding assets | [`docs/README.md`](docs/README.md), [`docs/versions/v0.7.0.md`](docs/versions/v0.7.0.md) ... [`v0.1.0.md`](docs/versions/v0.1.0.md) | `docs/versions/*.md`, `penos-boot-splash.svg`, `penos-favicon.svg` |
+| UI + shell | Framebuffer splash/logo + console overlay (with VGA fallback), quiet prompt, blocking shell with task management, opt-in demos, and a `shutdown` command | [`docs/architecture.md`](docs/architecture.md#5-ui-and-shell) | `src/ui/framebuffer.c`, `src/ui/console.c`, `src/shell/shell.c` |
+| Diagnostics & releases | Versioned change logs, docs index, branding assets | [`docs/README.md`](docs/README.md), [`docs/versions/v0.8.0.md`](docs/versions/v0.8.0.md) ... [`v0.1.0.md`](docs/versions/v0.1.0.md) | `docs/versions/*.md`, `penos-boot-splash.svg`, `penos-favicon.svg` |
 
 Use this table as a connected map: each feature row links directly to the design notes explaining the subsystem plus the primary source files to inspect.
 

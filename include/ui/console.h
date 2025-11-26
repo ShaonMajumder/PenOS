@@ -8,6 +8,6 @@ void console_putc(char c);
 void console_write(const char *s);
 void console_write_hex(uint32_t v);
 void console_write_dec(uint32_t v);
-void console_show_boot_splash(void);
+void console_show_boot_splash(const char *version);
 
 #endif

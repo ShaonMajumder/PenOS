@@ -1,5 +1,13 @@
 # PenOS Architecture Overview
 
+PenOS is a handcrafted 32-bit x86 kernel that boots via GRUB, runs its own assembly stub (`src/boot.s`), and then marches through a predictable bring-up sequence. The highlights recruiters, engineers, and storytellers care about are the same ones we hit at runtime:
+
+- **CPU & Interrupt Stack:** flat GDT/IDT + PIC remap + PIT give us deterministic interrupt handling backed by shared ISR stubs.
+- **Memory Core:** a bitmap PMM feeds higher-half paging (with recursive mapping) and a freelist-based heap so RAM management stays safe and transparent.
+- **Scheduler & Tasks:** preemptive round-robin with lifecycle tracking keeps shell-launched demos moving while freeing resources automatically.
+- **Drivers & Syscalls:** PS/2 keyboard/mouse plus an `int 0x80` gate cover interactive input and diagnostics hooks.
+- **UI Path:** VGA text is mirrored into a Multiboot framebuffer overlay that renders the PenOS splash/logo and keeps the shell visible inside a tinted panel.
+
 PenOS currently boots through GRUB, which loads `kernel.bin` and hands control to `start` in `src/boot.s`. The assembly stub builds a stack and calls `kernel_main`, entering C in 32-bit protected mode.
 
 1. CPU bring-up
@@ -8,7 +16,7 @@ PenOS currently boots through GRUB, which loads `kernel.bin` and hands control t
    - `idt_init` clears the descriptor table, while `interrupt_init` wires exception and IRQ stubs generated in `src/arch/x86/isr_stubs.S`.
    - The PIC is remapped to vectors 32-47 in `pic_remap` to avoid clashing with CPU exceptions.
    - The PIT is configured at 100 Hz (`timer_init`), incrementing a global tick counter and calling the scheduler stub each interrupt.
-   - `console_show_boot_splash` clears the VGA console and renders an ASCII PenOS splash once before normal init logs resume.
+   - `framebuffer_init` inspects the Multiboot framebuffer info (if present) so `console_show_boot_splash` can render the gradient PenOS splash/logo inside the 1024x768x32 linear buffer while still updating the legacy VGA console as a fallback.
 
 2. Memory management
    - `pmm_init` inspects the multiboot info block and computes a bitmap-backed frame allocator that hands out 4 KiB frames and supports freeing.
@@ -25,11 +33,12 @@ PenOS currently boots through GRUB, which loads `kernel.bin` and hands control t
    - `apps/sysinfo.c` demonstrates how subsystems compose: it queries PMM, timer, and scheduler state before printing via the console.
 
 5. UI and shell
-   - `ui/console.c` provides a VGA text console with scrolling, cursor management, and a branded ASCII splash helper that is shown once per boot.
-   - `shell/shell.c` blocks on keyboard input, tokenizes simple commands, and now offers task management (`ps`, `spawn <counter|spinner>`, `kill <pid>`) in addition to the diagnostic commands. Because demo tasks are opt-in, the shell prompt is quiet until the user launches them, and users can press `ESC`/`Ctrl+C` to stop the spinner/counter demo threads without typing `kill`.
+   - `ui/framebuffer.c` parses the GRUB-provided mode, exposes drawing primitives (`framebuffer_draw_pixel/rect/text/blit_sprite`), reserves a console overlay region, and renders the PenOS splash/logo before the init log appears. The overlay mirrors the 80x25 text grid so VGA consoles and the framebuffer stay in lockstep.
+   - `ui/console.c` still tracks the VGA cursor/scroller but now mirrors every cell into a shadow buffer; when the framebuffer overlay is active it calls back into `framebuffer_console_draw_cell` so scrolling/clearing/backspace immediately repaint the tinted rectangle.
+   - `shell/shell.c` blocks on keyboard input, tokenizes simple commands, offers task management (`ps`, `spawn <counter|spinner>`, `kill <pid>`), diagnostics, and now a `shutdown` command that exercises the new ACPI power helper. Demo tasks remain opt-in, and users can press `ESC`/`Ctrl+C` to stop the spinner/counter demo threads without typing `kill`.
 
 ## TODO highlights
 
-- Extend the shell, add filesystem plus storage drivers, and integrate GUI or framebuffer output.
+- Extend the shell, add filesystem plus storage drivers, and build richer framebuffer demos (mouse cursors, sprites, windows) on top of the new drawing primitives.
 - Expand the syscall table (and eventually raise the gate's DPL) so ring-3 processes can invoke richer kernel services.
 - Add user-mode tasks plus IPC so the new lifecycle/shell APIs manage more than demo workers.

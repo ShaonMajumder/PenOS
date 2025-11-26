@@ -1,7 +1,8 @@
 ARCH=i386
 CC ?= gcc
 LD ?= ld
-CFLAGS := -m32 -ffreestanding -fno-stack-protector -fno-pic -O2 -Wall -Wextra -Iinclude
+VERSION_STRING := $(strip $(shell cat VERSION))
+CFLAGS := -m32 -ffreestanding -fno-stack-protector -fno-pic -O2 -Wall -Wextra -Iinclude -DPENOS_VERSION=\"$(VERSION_STRING)\"
 LDFLAGS := -m elf_i386 -T linker.ld -nostdlib
 BUILD := build
 SRCS := $(shell find src -name "*.c")

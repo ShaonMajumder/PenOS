@@ -1,16 +1,62 @@
 #include "ui/console.h"
 #include "arch/x86/io.h"
+#include "ui/framebuffer.h"
 #include <stddef.h>
 #include <stdint.h>
 
+#define CONSOLE_COLS 80
+#define CONSOLE_ROWS 25
+
 static uint16_t *video_memory = (uint16_t *)0xB8000;
+static uint16_t shadow_buffer[CONSOLE_COLS * CONSOLE_ROWS];
 static size_t cursor_x = 0;
 static size_t cursor_y = 0;
 static uint8_t color = 0x0F;
+static int use_framebuffer_console = 0;
+
+static inline uint16_t make_entry(char c, uint8_t attr)
+{
+    return ((uint16_t)attr << 8) | (uint8_t)c;
+}
+
+static void sync_fb_console(void)
+{
+    if (use_framebuffer_console) {
+        framebuffer_console_full_refresh(shadow_buffer, CONSOLE_COLS, CONSOLE_ROWS);
+    }
+}
+
+static void draw_cell(size_t x, size_t y, char c)
+{
+    if (x >= CONSOLE_COLS || y >= CONSOLE_ROWS) {
+        return;
+    }
+    size_t idx = y * CONSOLE_COLS + x;
+    uint16_t entry = make_entry(c, color);
+    video_memory[idx] = entry;
+    shadow_buffer[idx] = entry;
+    if (use_framebuffer_console) {
+        framebuffer_console_draw_cell((uint32_t)x, (uint32_t)y, c, color);
+    }
+}
+
+static void blank_cell(size_t x, size_t y)
+{
+    if (x >= CONSOLE_COLS || y >= CONSOLE_ROWS) {
+        return;
+    }
+    size_t idx = y * CONSOLE_COLS + x;
+    uint16_t blank = make_entry(' ', color);
+    video_memory[idx] = blank;
+    shadow_buffer[idx] = blank;
+    if (use_framebuffer_console) {
+        framebuffer_console_draw_cell((uint32_t)x, (uint32_t)y, ' ', color);
+    }
+}
 
 static void move_cursor(void)
 {
-    uint16_t pos = cursor_y * 80 + cursor_x;
+    uint16_t pos = (uint16_t)(cursor_y * CONSOLE_COLS + cursor_x);
     outb(0x3D4, 0x0F);
     outb(0x3D5, (uint8_t)(pos & 0xFF));
     outb(0x3D4, 0x0E);
@@ -19,77 +65,67 @@ static void move_cursor(void)
 
 static void scroll(void)
 {
-    if (cursor_y < 25)
-    {
+    if (cursor_y < CONSOLE_ROWS) {
         return;
     }
-    size_t i;
-    for (i = 0; i < 24 * 80; ++i)
-    {
-        video_memory[i] = video_memory[i + 80];
+    size_t visible = (CONSOLE_ROWS - 1) * CONSOLE_COLS;
+    for (size_t i = 0; i < visible; ++i) {
+        video_memory[i] = video_memory[i + CONSOLE_COLS];
+        shadow_buffer[i] = shadow_buffer[i + CONSOLE_COLS];
     }
-    for (i = 24 * 80; i < 25 * 80; ++i)
-    {
-        video_memory[i] = (color << 8) | ' ';
+    uint16_t blank = make_entry(' ', color);
+    for (size_t i = visible; i < CONSOLE_ROWS * CONSOLE_COLS; ++i) {
+        video_memory[i] = blank;
+        shadow_buffer[i] = blank;
     }
-    cursor_y = 24;
+    cursor_y = CONSOLE_ROWS - 1;
+    sync_fb_console();
 }
 
 void console_init(void)
 {
     cursor_x = cursor_y = 0;
+    use_framebuffer_console = framebuffer_console_attach();
     console_clear();
 }
 
 void console_clear(void)
 {
-    for (size_t i = 0; i < 80 * 25; ++i)
-    {
-        video_memory[i] = (color << 8) | ' ';
+    uint16_t blank = make_entry(' ', color);
+    for (size_t i = 0; i < CONSOLE_COLS * CONSOLE_ROWS; ++i) {
+        video_memory[i] = blank;
+        shadow_buffer[i] = blank;
     }
     cursor_x = cursor_y = 0;
     move_cursor();
+    sync_fb_console();
 }
 
 void console_putc(char c)
 {
-    if (c == '\n')
-    {
+    if (c == '\n') {
         cursor_x = 0;
         cursor_y++;
-    }
-    else if (c == '\r')
-    {
+    } else if (c == '\r') {
         cursor_x = 0;
-    }
-    else if (c == '\b')
-    {
-        if (cursor_x > 0 || cursor_y > 0)
-        {
-            if (cursor_x == 0)
-            {
+    } else if (c == '\b') {
+        if (cursor_x > 0 || cursor_y > 0) {
+            if (cursor_x == 0) {
                 cursor_y--;
-                cursor_x = 79;
-            }
-            else
-            {
+                cursor_x = CONSOLE_COLS - 1;
+            } else {
                 cursor_x--;
             }
-            video_memory[cursor_y * 80 + cursor_x] = (color << 8) | ' ';
+            blank_cell(cursor_x, cursor_y);
         }
-    }
-    else if (c == '\t')
-    {
+    } else if (c == '\t') {
         cursor_x = (cursor_x + 8) & ~(8 - 1);
-    }
-    else
-    {
-        video_memory[cursor_y * 80 + cursor_x] = (color << 8) | c;
+    } else {
+        draw_cell(cursor_x, cursor_y, c);
         cursor_x++;
     }
 
-    if (cursor_x >= 80)
-    {
+    if (cursor_x >= CONSOLE_COLS) {
         cursor_x = 0;
         cursor_y++;
     }
@@ -99,8 +135,7 @@ void console_putc(char c)
 
 void console_write(const char *s)
 {
-    while (*s)
-    {
+    while (*s) {
         console_putc(*s++);
     }
 }
@@ -109,34 +144,36 @@ void console_write_hex(uint32_t v)
 {
     const char *hex = "0123456789ABCDEF";
     console_write("0x");
-    for (int i = 28; i >= 0; i -= 4)
-    {
+    for (int i = 28; i >= 0; i -= 4) {
         console_putc(hex[(v >> i) & 0xF]);
     }
 }
 
 void console_write_dec(uint32_t v)
 {
-    if (v == 0)
-    {
+    if (v == 0) {
         console_putc('0');
         return;
     }
     char buf[16];
     int i = 0;
-    while (v > 0 && i < 15)
-    {
+    while (v > 0 && i < 15) {
         buf[i++] = '0' + (v % 10);
         v /= 10;
     }
-    while (i--)
-    {
+    while (i--) {
         console_putc(buf[i]);
     }
 }
 
-void console_show_boot_splash(void)
+void console_show_boot_splash(const char *version)
 {
+    if (framebuffer_available()) {
+        framebuffer_render_splash(version);
+        sync_fb_console();
+        return;
+    }
+
     static const char *lines[] = {
         "",
         "                        8888888b.                    .d88888b.   .d8888b.  ",
@@ -153,9 +190,13 @@ void console_show_boot_splash(void)
         "--------------------------------------------------------------------------------",
         ""};
     console_clear();
-    for (size_t i = 0; i < sizeof(lines) / sizeof(lines[0]); ++i)
-    {
+    for (size_t i = 0; i < sizeof(lines) / sizeof(lines[0]); ++i) {
         console_write(lines[i]);
+        console_putc('\n');
+    }
+    if (version && *version) {
+        console_write("Version: ");
+        console_write(version);
         console_putc('\n');
     }
 }

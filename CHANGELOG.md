@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.0
+
+- Added a Multiboot framebuffer module that initializes the 1024x768x32 mode, draws the PenOS splash/logo, exposes pixel/rect/text/sprite helpers, and pipes the shell console into a tinted overlay without losing the VGA fallback.
+- Introduced a `shutdown` shell command backed by a tiny power-off helper so QEMU/Bochs/VirtualBox guests can exit cleanly from the prompt.
+- Updated docs (architecture, README, release notes) plus the build (`-DPENOS_VERSION`) so the splash and console know the runtime version string.
+
 ## v0.7.0
 
 - Added a PS/2 mouse driver that enables the auxiliary port, parses 3-byte packets on IRQ12, and logs cursor/button state for future GUI work.
