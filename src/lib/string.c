@@ -47,3 +47,40 @@ char *strncpy(char *dst, const char *src, size_t n)
     }
     return dst;
 }
+
+void *memset(void *dst, int value, size_t count)
+{
+    unsigned char *ptr = (unsigned char *)dst;
+    while (count--)
+    {
+        *ptr++ = (unsigned char)value;
+    }
+    return dst;
+}
+
+void *memmove(void *dst, const void *src, size_t count)
+{
+    unsigned char *d = (unsigned char *)dst;
+    const unsigned char *s = (const unsigned char *)src;
+
+    if (d == s || count == 0)
+    {
+        return dst;
+    }
+
+    if (d < s)
+    {
+        for (size_t i = 0; i < count; ++i)
+        {
+            d[i] = s[i];
+        }
+    }
+    else
+    {
+        for (size_t i = count; i != 0; --i)
+        {
+            d[i - 1] = s[i - 1];
+        }
+    }
+    return dst;
+}

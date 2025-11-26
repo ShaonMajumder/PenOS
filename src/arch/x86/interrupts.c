@@ -5,7 +5,6 @@
 #include "arch/x86/io.h"
 #include "arch/x86/pic.h"
 #include "ui/console.h"
-#include "drivers/mouse.h"
 
 static isr_t handlers[256];
 static interrupt_frame_t *next_frame_override = NULL;
@@ -149,8 +148,6 @@ void interrupt_init(void)
     set_gate(46, isr46);
     set_gate(47, isr47);
     set_gate(128, isr128);
-
-    mouse_init();
 }
 
 void register_interrupt_handler(uint8_t n, isr_t handler)

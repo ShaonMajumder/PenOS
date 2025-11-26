@@ -29,15 +29,18 @@ static void banner(void)
 
 void kernel_main(uint32_t magic, multiboot_info_t *mb_info)
 {
-    if (magic == 0x2BADB002) {
+    if (magic == 0x2BADB002)
+    {
         fb_init(mb_info);
     }
 
     console_init();
-    if (magic != 0x2BADB002) {
+    if (magic != 0x2BADB002)
+    {
         console_write("Invalid multiboot magic!\n");
-        for (;;) {
-            __asm__ volatile ("hlt");
+        for (;;)
+        {
+            __asm__ volatile("hlt");
         }
     }
 
@@ -50,7 +53,7 @@ void kernel_main(uint32_t magic, multiboot_info_t *mb_info)
     interrupt_init();
     timer_init(100);
     pmm_init(mb_info);
-    paging_init();
+    // paging_init(); // fix it - paging_init(); stucking the gui environment to start in kernel.c
     heap_init();
     keyboard_init();
     mouse_init();
@@ -58,16 +61,18 @@ void kernel_main(uint32_t magic, multiboot_info_t *mb_info)
     sched_init();
 
     console_write("Initialization complete. Enabling interrupts...\n");
-    __asm__ volatile ("sti");
+    __asm__ volatile("sti");
 
-    if (fb_present()) {
+    if (fb_present())
+    {
         desktop_start();
     }
 
     shell_run();
 
     console_write("Shell exited. Halting.\n");
-    for (;;) {
-        __asm__ volatile ("hlt");
+    for (;;)
+    {
+        __asm__ volatile("hlt");
     }
 }
