@@ -53,7 +53,7 @@ void kernel_main(uint32_t magic, multiboot_info_t *mb_info)
     interrupt_init();
     timer_init(100);
     pmm_init(mb_info);
-    // paging_init(); // fix it - paging_init(); stucking the gui environment to start in kernel.c
+    paging_init();
     heap_init();
     keyboard_init();
     mouse_init();

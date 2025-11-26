@@ -1,132 +1,89 @@
 #include "mem/paging.h"
-#include "mem/pmm.h"
 #include "ui/console.h"
 #include <string.h>
 
 #define PAGE_TABLE_ENTRIES 1024
 #define PAGE_DIRECTORY_ENTRIES 1024
-#define PAGE_TABLE_SIZE (PAGE_TABLE_ENTRIES * sizeof(uint32_t))
+#define IDENTITY_PD_ENTRIES     PAGE_DIRECTORY_ENTRIES /* map the full 4 GiB */
+#define IDENTITY_LIMIT_BYTES    (IDENTITY_PD_ENTRIES * 4 * 1024 * 1024U)
 
-static uint32_t current_pd_phys = 0;
-static uint32_t *current_pd = 0;
-
-static inline uint32_t align_up(uint32_t value, uint32_t align)
-{
-    return (value + align - 1U) & ~(align - 1U);
-}
+/* One global page directory + page tables for a full identity map. */
+static uint32_t page_directory[PAGE_DIRECTORY_ENTRIES] __attribute__((aligned(4096)));
+static uint32_t page_tables[IDENTITY_PD_ENTRIES][PAGE_TABLE_ENTRIES] __attribute__((aligned(4096)));
 
 static inline void invlpg(uint32_t addr)
 {
-    __asm__ volatile ("invlpg (%0)" :: "r"(addr) : "memory");
+    __asm__ volatile("invlpg (%0)" :: "r"(addr) : "memory");
 }
 
-static uint32_t *phys_to_ptr(uint32_t phys)
+static void load_page_directory(uint32_t phys)
 {
-    return (uint32_t *)(phys);
+    __asm__ volatile("mov %0, %%cr3" : : "r"(phys));
+    uint32_t cr0;
+    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
+    cr0 |= 0x80000000U; /* set PG bit */
+    __asm__ volatile("mov %0, %%cr0" : : "r"(cr0));
 }
 
-static uint32_t alloc_frame_zero(void)
+static uint32_t *get_page_table(uint32_t virt)
 {
-    uint32_t phys = pmm_alloc_frame();
-    if (phys == 0) {
-        console_write("PMM exhausted while building paging.\n");
-        for (;;) {
-            __asm__ volatile ("cli; hlt");
-        }
+    uint32_t dir_index = virt >> 22;
+    if (dir_index >= PAGE_DIRECTORY_ENTRIES) {
+        return NULL;
     }
-    memset(phys_to_ptr(phys), 0, PAGE_SIZE);
-    return phys;
-}
-
-static uint32_t *get_page_table(uint32_t virt, int create)
-{
-    uint32_t pd_index = virt >> 22;
-    uint32_t entry = current_pd[pd_index];
-    if (!(entry & PAGE_PRESENT)) {
-        if (!create) {
-            return NULL;
-        }
-        uint32_t table_phys = alloc_frame_zero();
-        current_pd[pd_index] = table_phys | PAGE_PRESENT | PAGE_RW;
-        entry = current_pd[pd_index];
-    }
-    uint32_t table_phys = entry & ~0xFFFU;
-    return phys_to_ptr(table_phys);
+    return page_tables[dir_index];
 }
 
 void paging_map(uint32_t virt, uint32_t phys, uint32_t flags)
 {
-    uint32_t *table = get_page_table(virt, 1);
-    uint32_t pt_index = (virt >> 12) & 0x3FFU;
-    table[pt_index] = (phys & ~0xFFFU) | PAGE_PRESENT | (flags & 0xFFFU);
+    uint32_t *table = get_page_table(virt);
+    if (!table) {
+        return;
+    }
+    uint32_t idx = (virt >> 12) & 0x3FFU;
+    table[idx] = (phys & ~0xFFFU) | PAGE_PRESENT | (flags & 0xFFFU);
     invlpg(virt);
 }
 
 void paging_unmap(uint32_t virt)
 {
-    uint32_t *table = get_page_table(virt, 0);
+    uint32_t *table = get_page_table(virt);
     if (!table) {
         return;
     }
-    uint32_t pt_index = (virt >> 12) & 0x3FFU;
-    table[pt_index] = 0;
+    uint32_t idx = (virt >> 12) & 0x3FFU;
+    table[idx] = 0;
     invlpg(virt);
 }
 
 uint32_t paging_virt_to_phys(uint32_t virt)
 {
-    uint32_t *table = get_page_table(virt, 0);
+    uint32_t *table = get_page_table(virt);
     if (!table) {
         return 0;
     }
-    uint32_t pt_index = (virt >> 12) & 0x3FFU;
-    uint32_t entry = table[pt_index];
+    uint32_t idx = (virt >> 12) & 0x3FFU;
+    uint32_t entry = table[idx];
     if (!(entry & PAGE_PRESENT)) {
         return 0;
     }
     return (entry & ~0xFFFU) | (virt & 0xFFFU);
 }
 
-static void load_page_directory(uint32_t phys)
-{
-    __asm__ volatile ("mov %0, %%cr3" :: "r"(phys));
-    uint32_t cr0;
-    __asm__ volatile ("mov %%cr0, %0" : "=r"(cr0));
-    cr0 |= 0x80000000U;
-    __asm__ volatile ("mov %0, %%cr0" :: "r"(cr0));
-}
-
-static void map_identity_region(uint32_t length)
-{
-    uint32_t pages = align_up(length, PAGE_SIZE) / PAGE_SIZE;
-    for (uint32_t i = 0; i < pages; ++i) {
-        uint32_t phys = i * PAGE_SIZE;
-        paging_map(phys, phys, PAGE_RW);
-    }
-}
-
-static void map_kernel_higher_half(void)
-{
-    extern uint8_t end;
-    uint32_t kernel_phys_start = 0x00100000U; /* linker places kernel at 1 MiB */
-    uint32_t kernel_phys_end = align_up((uint32_t)(uintptr_t)&end, PAGE_SIZE);
-    for (uint32_t phys = kernel_phys_start; phys < kernel_phys_end; phys += PAGE_SIZE) {
-        uint32_t virt = KERNEL_VIRT_BASE + phys;
-        paging_map(virt, phys, PAGE_RW);
-    }
-}
-
 void paging_init(void)
 {
-    current_pd_phys = alloc_frame_zero();
-    current_pd = phys_to_ptr(current_pd_phys);
+    /* Build an identity-mapped page directory covering the full 4 GiB space. */
+    memset(page_directory, 0, sizeof(page_directory));
+    memset(page_tables, 0, sizeof(page_tables));
 
-    /* Recursive mapping for easy PD/PT access later */
-    current_pd[1023] = current_pd_phys | PAGE_PRESENT | PAGE_RW;
+    for (uint32_t pd = 0; pd < PAGE_DIRECTORY_ENTRIES; ++pd) {
+        page_directory[pd] = ((uint32_t)page_tables[pd]) | PAGE_PRESENT | PAGE_RW;
+        for (uint32_t pt = 0; pt < PAGE_TABLE_ENTRIES; ++pt) {
+            uint32_t phys = (pd << 22) | (pt << 12);
+            page_tables[pd][pt] = phys | PAGE_PRESENT | PAGE_RW;
+        }
+    }
 
-    map_identity_region(16 * 1024 * 1024); /* identity-map first 16 MiB */
-    map_kernel_higher_half();
-
-    load_page_directory(current_pd_phys);
-    console_write("Paging enabled. Kernel mapped at higher half.\n");
+    load_page_directory((uint32_t)page_directory);
+    console_write("Paging enabled with identity map.\n");
 }
