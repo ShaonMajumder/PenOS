@@ -109,6 +109,7 @@ isr_common_stub:
     push %esp
     call isr_dispatch
     add $4, %esp
+    mov %eax, %esp
 
     pop %gs
     pop %fs
@@ -117,4 +118,4 @@ isr_common_stub:
     popa
 
     add $8, %esp
-    iretd
+    iret

@@ -22,7 +22,7 @@ typedef void (*sched_iter_cb)(const sched_task_info_t *info);
 void sched_init(void);
 int32_t sched_spawn_named(const char *name);
 int sched_kill(uint32_t id);
-void sched_tick(interrupt_frame_t *frame);
+interrupt_frame_t *sched_tick(interrupt_frame_t *frame);
 uint32_t sched_task_count(void);
 void sched_for_each(sched_iter_cb cb);
 const char *sched_state_name(task_state_t state);

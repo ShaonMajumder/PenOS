@@ -6,8 +6,11 @@ LDFLAGS := -m elf_i386 -T linker.ld -nostdlib
 BUILD := build
 SRCS := $(shell find src -name "*.c")
 ASMS := $(shell find src -name "*.S" -o -name "*.s")
+ASM_OBJS := $(patsubst src/%, $(BUILD)/%, $(ASMS))
+ASM_OBJS := $(ASM_OBJS:.S=.o)
+ASM_OBJS := $(ASM_OBJS:.s=.o)
 OBJS := $(patsubst src/%, $(BUILD)/%, $(SRCS:.c=.o)) \
-         $(patsubst src/%, $(BUILD)/%, $(ASMS:.S=.o))
+         $(ASM_OBJS)
 
 all: $(BUILD)/kernel.bin iso
 
@@ -16,6 +19,10 @@ $(BUILD)/%.o: src/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/%.o: src/%.S
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/%.o: src/%.s
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 

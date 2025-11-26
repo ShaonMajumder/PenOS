@@ -8,7 +8,11 @@ static uint64_t ticks = 0;
 static void timer_callback(interrupt_frame_t *frame)
 {
     ticks++;
-    sched_tick(frame);
+    interrupt_frame_t *next = sched_tick(frame);
+    if (next && next != frame)
+    {
+        interrupt_request_frame_switch(next);
+    }
 }
 
 void timer_init(uint32_t frequency)

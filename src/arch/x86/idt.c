@@ -6,7 +6,7 @@
 static idt_entry_t idt[IDT_ENTRIES];
 static idt_ptr_t idtp;
 
-extern void isr_stub_table[];
+extern void (*isr_stub_table[])(void);
 
 void idt_set_entry(uint8_t vec, void (*handler)(void), uint16_t selector, uint8_t flags)
 {

@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stddef.h>
 #include "arch/x86/interrupts.h"
 #include "arch/x86/idt.h"
 #include "arch/x86/io.h"
@@ -7,6 +8,61 @@
 #include "drivers/mouse.h"
 
 static isr_t handlers[256];
+static interrupt_frame_t *next_frame_override = NULL;
+
+static void print_page_fault_details(uint32_t err_code)
+{
+    uint32_t cr2;
+    __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
+    console_write("  cr2=0x");
+    console_write_hex(cr2);
+    console_write(" (");
+    console_write((err_code & 0x1) ? "present " : "not-present ");
+    console_write((err_code & 0x2) ? "write " : "read ");
+    console_write((err_code & 0x4) ? "user" : "kernel");
+    console_write(")\n");
+}
+
+static void panic_with_frame(const char *msg, const interrupt_frame_t *frame)
+{
+    uint32_t handler_esp = 0;
+    __asm__ volatile("mov %%esp, %0" : "=r"(handler_esp));
+
+    console_write("[panic] ");
+    console_write(msg);
+    console_write("\n  int=");
+    console_write_dec(frame ? frame->int_no : 0);
+    console_write(" err=0x");
+    console_write_hex(frame ? frame->err_code : 0);
+    console_write(" eip=0x");
+    console_write_hex(frame ? frame->eip : 0);
+    console_write(" cs=0x");
+    console_write_hex(frame ? frame->cs : 0);
+    console_write(" eflags=0x");
+    console_write_hex(frame ? frame->eflags : 0);
+    console_write("\n  esp@irq=0x");
+    console_write_hex(frame ? frame->esp : 0);
+    console_write(" esp@handler=0x");
+    console_write_hex(handler_esp);
+    console_write("\n");
+    if (frame && frame->int_no == 14)
+    {
+        print_page_fault_details(frame->err_code);
+    }
+    console_write("System halted.\n");
+    for (;;)
+    {
+        __asm__ volatile("cli; hlt");
+    }
+}
+
+void interrupt_request_frame_switch(interrupt_frame_t *frame)
+{
+    if (frame)
+    {
+        next_frame_override = frame;
+    }
+}
 
 #define DECL_ISR(n) extern void isr##n(void)
 DECL_ISR(0);
@@ -124,19 +180,13 @@ static const char *exception_messages[] = {
     "Machine Check",
     "Reserved"};
 
-void isr_dispatch(interrupt_frame_t *frame)
+interrupt_frame_t *isr_dispatch(interrupt_frame_t *frame)
 {
     uint8_t int_no = frame->int_no;
 
     if (int_no < 20)
     {
-        console_write("Exception: ");
-        console_write(exception_messages[int_no]);
-        console_write("\nSystem halted.\n");
-        for (;;)
-        {
-            __asm__ volatile("cli; hlt");
-        }
+        panic_with_frame(exception_messages[int_no], frame);
     }
 
     if (handlers[int_no])
@@ -148,4 +198,8 @@ void isr_dispatch(interrupt_frame_t *frame)
     {
         pic_send_eoi(int_no - 32);
     }
+
+    interrupt_frame_t *resume = next_frame_override ? next_frame_override : frame;
+    next_frame_override = NULL;
+    return resume;
 }

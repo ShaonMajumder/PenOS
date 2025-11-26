@@ -4,7 +4,7 @@ SECTIONS
     . = 1M;
     .multiboot ALIGN(4K) :
     {
-        *(.multiboot)
+        KEEP(*(.multiboot))
     }
     .text ALIGN(4K) :
     {
@@ -23,4 +23,5 @@ SECTIONS
         *(COMMON)
         *(.bss*)
     }
+    end = .;
 }

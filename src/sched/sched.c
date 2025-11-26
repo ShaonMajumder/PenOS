@@ -10,7 +10,7 @@ typedef struct task_entry {
     uint32_t id;
     char name[32];
     task_state_t state;
-    interrupt_frame_t context;
+    interrupt_frame_t *frame;
     void (*entry)(void);
     uint8_t *stack;
 } task_entry_t;
@@ -37,6 +37,8 @@ void sched_init(void)
     current_task = &tasks[0];
     current_task->id = 0;
     current_task->state = TASK_RUNNING;
+    current_task->frame = NULL;
+    current_task->stack = NULL;
     strncpy(current_task->name, "main", sizeof(current_task->name) - 1);
     active_tasks = 1;
     current_index = 0;
@@ -66,17 +68,20 @@ static int32_t spawn_task(void (*entry)(void), const char *name)
     strncpy(task->name, name, sizeof(task->name) - 1);
     task->stack = stack;
 
-    uint32_t top = (uint32_t)stack + STACK_SIZE;
-    interrupt_frame_t *ctx = &task->context;
-    memset(ctx, 0, sizeof(*ctx));
-    ctx->eip = (uint32_t)task_trampoline;
-    ctx->cs = 0x08;
-    ctx->ds = ctx->es = ctx->fs = ctx->gs = 0x10;
-    ctx->ss = 0x10;
-    ctx->eflags = 0x202;
-    ctx->esp = top;
-    ctx->ebp = top;
-    ctx->useresp = top;
+    uint32_t stack_top = ((uint32_t)stack + STACK_SIZE) & ~0xF;
+    interrupt_frame_t *frame = (interrupt_frame_t *)(stack_top - sizeof(interrupt_frame_t));
+    memset(frame, 0, sizeof(*frame));
+    frame->gs = frame->fs = frame->es = frame->ds = 0x10;
+    frame->edi = frame->esi = 0;
+    frame->ebp = stack_top;
+    frame->esp = stack_top;
+    frame->ebx = frame->edx = frame->ecx = frame->eax = 0;
+    frame->int_no = 0;
+    frame->err_code = 0;
+    frame->eip = (uint32_t)task_trampoline;
+    frame->cs = 0x08;
+    frame->eflags = 0x202;
+    task->frame = frame;
 
     active_tasks++;
     return (int32_t)task->id;
@@ -116,14 +121,18 @@ int sched_kill(uint32_t id)
     return 0;
 }
 
-void sched_tick(interrupt_frame_t *frame)
+interrupt_frame_t *sched_tick(interrupt_frame_t *frame)
 {
-    if (current_task && current_task->state == TASK_RUNNING) {
-        current_task->context = *frame;
+    if (!current_task) {
+        return frame;
+    }
+
+    if (current_task->state == TASK_RUNNING) {
+        current_task->frame = frame;
         current_task->state = TASK_READY;
     }
 
-    if (current_task && current_task->state == TASK_ZOMBIE) {
+    if (current_task->state == TASK_ZOMBIE) {
         destroy_task(current_task);
         current_task = NULL;
     }
@@ -132,12 +141,25 @@ void sched_tick(interrupt_frame_t *frame)
 
     task_entry_t *next = pick_next_task();
     if (!next) {
-        current_task = NULL;
-        return;
+        if (!current_task) {
+            current_task = &tasks[0];
+        }
+        if (current_task->state != TASK_RUNNING) {
+            current_task->state = TASK_RUNNING;
+        }
+        if (!current_task->frame) {
+            current_task->frame = frame;
+        }
+        return frame;
     }
+
     current_task = next;
     current_task->state = TASK_RUNNING;
-    *frame = current_task->context;
+    if (!current_task->frame) {
+        current_task->frame = frame;
+        return frame;
+    }
+    return current_task->frame;
 }
 
 uint32_t sched_task_count(void)
@@ -207,7 +229,7 @@ static void destroy_task(task_entry_t *task)
     memset(task->name, 0, sizeof(task->name));
     task->state = TASK_UNUSED;
     task->entry = NULL;
-    memset(&task->context, 0, sizeof(task->context));
+    task->frame = NULL;
     if (active_tasks) {
         --active_tasks;
     }
