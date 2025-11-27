@@ -7,6 +7,7 @@
 #include "sched/sched.h"
 #include "sys/power.h"
 #include "ui/desktop.h"
+#include "ui/fb.h"
 #include <string.h>
 
 typedef struct {
@@ -97,12 +98,38 @@ static int getline_block(char *buffer, int max)
 
 static void cmd_help(void)
 {
-    console_write("Commands: help, clear, echo, ticks, sysinfo, ps, spawn <task>, kill <pid>, gui, halt, shutdown\n");
+    console_write("Commands: help, clear, echo, ticks, sysinfo, ps, spawn <task>, kill <pid>, gui, autogui <on|off|status>, halt, shutdown\n");
 }
 
 static void cmd_gui(void)
 {
     desktop_start();
+}
+
+static void cmd_autogui(const char *args)
+{
+    while (*args == ' ') {
+        ++args;
+    }
+    if (*args == '\0' || !strcmp(args, "status")) {
+        console_write("[autogui] ");
+        console_write(desktop_autostart_enabled() ? "enabled\n" : "disabled\n");
+        return;
+    }
+    if (!strcmp(args, "on") || !strcmp(args, "enable")) {
+        desktop_set_autostart(1);
+        console_write("[autogui] enabled\n");
+        if (fb_present()) {
+            desktop_start();
+        }
+        return;
+    }
+    if (!strcmp(args, "off") || !strcmp(args, "disable")) {
+        desktop_set_autostart(0);
+        console_write("[autogui] disabled\n");
+        return;
+    }
+    console_write("Usage: autogui <on|off|status>\n");
 }
 
 static void cmd_echo(const char *args)
@@ -227,6 +254,9 @@ void shell_run(void)
             cmd_kill(input + 5);
         } else if (!strcmp(input, "gui")) {
             cmd_gui();
+        } else if (!strncmp(input, "autogui", 7)) {
+            const char *arg = input + 7;
+            cmd_autogui(arg);
         } else if (!strcmp(input, "halt")) {
             break;
         } else if (!strcmp(input, "shutdown")) {

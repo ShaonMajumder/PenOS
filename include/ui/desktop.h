@@ -33,4 +33,11 @@ void desktop_start(void);
  */
 void desktop_handle_mouse(int dx, int dy, uint8_t buttons);
 
+/* Simple notification line rendered on the top bar */
+void desktop_notify(const char *message);
+
+/* Autostart flag helpers (used by kernel/shell) */
+void desktop_set_autostart(int enabled);
+int desktop_autostart_enabled(void);
+
 #endif /* UI_DESKTOP_H */

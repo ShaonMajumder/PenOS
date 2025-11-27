@@ -77,3 +77,16 @@ void fb_console_set_visible(int visible)
 {
     framebuffer_console_set_visible(visible);
 }
+
+void fb_begin_frame(void)
+{
+    (void)0;
+}
+
+void fb_end_frame(void)
+{
+    if (!fb_ready) {
+        return;
+    }
+    framebuffer_present();
+}

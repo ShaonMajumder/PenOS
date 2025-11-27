@@ -24,6 +24,7 @@ void framebuffer_draw_text(uint32_t x, uint32_t y, const char *text, uint32_t fg
 void framebuffer_draw_text_scaled(uint32_t x, uint32_t y, const char *text, uint32_t fg, uint32_t bg, uint32_t scale);
 void framebuffer_blit_sprite(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint32_t *pixels, int skip_zero);
 void framebuffer_render_splash(const char *version);
+void framebuffer_present(void);
 
 void framebuffer_console_configure(uint32_t cols, uint32_t rows);
 int framebuffer_console_attach(void);

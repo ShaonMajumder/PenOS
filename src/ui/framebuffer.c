@@ -3,6 +3,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define FB_MAX_WIDTH 1024
+#define FB_MAX_HEIGHT 768
+
 typedef struct {
     framebuffer_info_t hw;
     int present;
@@ -23,6 +26,10 @@ typedef struct {
 
 static framebuffer_state_t fb = {0};
 static framebuffer_console_state_t fb_console = {0};
+
+static uint32_t fb_backbuffer[FB_MAX_WIDTH * FB_MAX_HEIGHT];
+static uint32_t fb_buf_width = 0;
+static uint32_t fb_buf_height = 0;
 
 static const uint32_t vga_palette[16] = {
     0xFF000000, 0xFFAA0000, 0xFF00AA00, 0xFFAA5500,
@@ -168,6 +175,42 @@ static inline uint32_t pack_color(uint8_t r, uint8_t g, uint8_t b)
     return 0xFF000000u | ((uint32_t)r << 16) | ((uint32_t)g << 8) | (uint32_t)b;
 }
 
+static inline void backbuffer_put_pixel(uint32_t x, uint32_t y, uint32_t color)
+{
+    if (x >= fb_buf_width || y >= fb_buf_height) {
+        return;
+    }
+    fb_backbuffer[y * FB_MAX_WIDTH + x] = color;
+}
+
+static void backbuffer_clear(uint32_t color)
+{
+    if (fb_buf_width == 0 || fb_buf_height == 0) {
+        return;
+    }
+    for (uint32_t y = 0; y < fb_buf_height; ++y) {
+        uint32_t *row = &fb_backbuffer[y * FB_MAX_WIDTH];
+        for (uint32_t x = 0; x < fb_buf_width; ++x) {
+            row[x] = color;
+        }
+    }
+}
+
+static void backbuffer_blit_to_hw(void)
+{
+    if (!fb.present || fb_buf_width == 0 || fb_buf_height == 0) {
+        return;
+    }
+    uint32_t width_bytes = fb_buf_width * sizeof(uint32_t);
+    for (uint32_t y = 0; y < fb_buf_height; ++y) {
+        uint8_t *dest = fb.hw.addr + y * fb.hw.pitch;
+        const uint8_t *src = (const uint8_t *)&fb_backbuffer[y * FB_MAX_WIDTH];
+        for (uint32_t i = 0; i < width_bytes; ++i) {
+            dest[i] = src[i];
+        }
+    }
+}
+
 static inline uint32_t bpp_bytes(void)
 {
     return fb.hw.bpp / 8;
@@ -212,6 +255,15 @@ void framebuffer_init(multiboot_info_t *mb_info)
     fb.hw.height = mb_info->framebuffer_height;
     fb.hw.pitch = mb_info->framebuffer_pitch;
     fb.hw.bpp = mb_info->framebuffer_bpp;
+    fb_buf_width = fb.hw.width;
+    if (fb_buf_width > FB_MAX_WIDTH) {
+        fb_buf_width = FB_MAX_WIDTH;
+    }
+    fb_buf_height = fb.hw.height;
+    if (fb_buf_height > FB_MAX_HEIGHT) {
+        fb_buf_height = FB_MAX_HEIGHT;
+    }
+    backbuffer_clear(0);
     fb.present = 1;
 }
 
@@ -228,17 +280,17 @@ const framebuffer_info_t *framebuffer_query(void)
     return &fb.hw;
 }
 
+void framebuffer_present(void)
+{
+    backbuffer_blit_to_hw();
+}
+
 void framebuffer_draw_pixel(uint32_t x, uint32_t y, uint32_t color)
 {
     if (!fb.present) {
         return;
     }
-    if (x >= fb.hw.width || y >= fb.hw.height) {
-        return;
-    }
-    uint8_t *row = fb.hw.addr + y * fb.hw.pitch;
-    uint32_t *pixel = (uint32_t *)(row + x * bpp_bytes());
-    *pixel = color;
+    backbuffer_put_pixel(x, y, color);
 }
 
 void framebuffer_clear(uint32_t color)
@@ -246,34 +298,30 @@ void framebuffer_clear(uint32_t color)
     if (!fb.present) {
         return;
     }
-    uint32_t width = fb.hw.width;
-    uint32_t height = fb.hw.height;
-    for (uint32_t y = 0; y < height; ++y) {
-        uint8_t *row = fb.hw.addr + y * fb.hw.pitch;
-        for (uint32_t x = 0; x < width; ++x) {
-            ((uint32_t *)row)[x] = color;
-        }
-    }
+    backbuffer_clear(color);
 }
 
 void framebuffer_draw_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color)
 {
-    if (!fb.present) {
+    if (!fb.present || fb_buf_width == 0 || fb_buf_height == 0) {
         return;
     }
-    if (x >= fb.hw.width || y >= fb.hw.height) {
+    if (x >= fb_buf_width || y >= fb_buf_height) {
         return;
     }
-    if (x + w > fb.hw.width) {
-        w = fb.hw.width - x;
+    if (x + w > fb_buf_width) {
+        w = fb_buf_width - x;
     }
-    if (y + h > fb.hw.height) {
-        h = fb.hw.height - y;
+    if (y + h > fb_buf_height) {
+        h = fb_buf_height - y;
+    }
+    if (w == 0 || h == 0) {
+        return;
     }
     for (uint32_t yy = 0; yy < h; ++yy) {
-        uint8_t *row = fb.hw.addr + (y + yy) * fb.hw.pitch;
+        uint32_t *row = &fb_backbuffer[(y + yy) * FB_MAX_WIDTH];
         for (uint32_t xx = 0; xx < w; ++xx) {
-            ((uint32_t *)row)[x + xx] = color;
+            row[x + xx] = color;
         }
     }
 }
@@ -337,11 +385,13 @@ void framebuffer_console_configure(uint32_t cols, uint32_t rows)
     fb_console.cell_h = 8 * fb_console.glyph_scale;
     uint32_t console_width_px = fb_console.cell_w * cols;
     uint32_t console_height_px = fb_console.cell_h * rows;
-    fb_console.origin_x = (fb.hw.width > console_width_px)
-                              ? (fb.hw.width - console_width_px) / 2
+    uint32_t width = fb_buf_width ? fb_buf_width : fb.hw.width;
+    uint32_t height = fb_buf_height ? fb_buf_height : fb.hw.height;
+    fb_console.origin_x = (width > console_width_px)
+                              ? (width - console_width_px) / 2
                               : 0;
-    fb_console.origin_y = (fb.hw.height > console_height_px + 32)
-                              ? (fb.hw.height - console_height_px - 24)
+    fb_console.origin_y = (height > console_height_px + 32)
+                              ? (height - console_height_px - 24)
                               : 0;
     fb_console.visible = 1;
     fb_console.configured = 1;
@@ -422,36 +472,31 @@ void framebuffer_console_full_refresh(const uint16_t *buffer, uint32_t cols, uin
 
 void framebuffer_render_splash(const char *version)
 {
-    if (!fb.present) {
+    if (!fb.present || fb_buf_width == 0 || fb_buf_height == 0) {
         return;
     }
 
-    // Background gradient
-    for (uint32_t y = 0; y < fb.hw.height; ++y) {
-        uint8_t mix = (uint8_t)((y * 64) / fb.hw.height);
+    for (uint32_t y = 0; y < fb_buf_height; ++y) {
+        uint8_t mix = (uint8_t)((y * 64) / fb_buf_height);
         uint32_t color = pack_color(8 + mix, 12 + mix / 2, 24 + mix);
-        uint8_t *row = fb.hw.addr + y * fb.hw.pitch;
-        for (uint32_t x = 0; x < fb.hw.width; ++x) {
-            ((uint32_t *)row)[x] = color;
+        for (uint32_t x = 0; x < fb_buf_width; ++x) {
+            backbuffer_put_pixel(x, y, color);
         }
     }
 
-    // Accent diagonal stripe
-    for (uint32_t y = 0; y < fb.hw.height; ++y) {
+    for (uint32_t y = 0; y < fb_buf_height; ++y) {
         uint32_t stripe_x_start = (uint32_t)((int32_t)y / 2);
-        if (stripe_x_start < fb.hw.width) {
-            uint32_t width = fb.hw.width / 3;
-            if (stripe_x_start + width > fb.hw.width) {
-                width = fb.hw.width - stripe_x_start;
+        if (stripe_x_start < fb_buf_width) {
+            uint32_t width = fb_buf_width / 3;
+            if (stripe_x_start + width > fb_buf_width) {
+                width = fb_buf_width - stripe_x_start;
             }
             framebuffer_draw_rect(stripe_x_start, y, width, 1, 0xFF143D59);
         }
     }
 
-    // Header bar
-    framebuffer_draw_rect(0, 0, fb.hw.width, 96, 0xFF0F1923);
+    framebuffer_draw_rect(0, 0, fb_buf_width, 96, 0xFF0F1923);
 
-    // Sprite data encoded as characters for readability
     static const char *sprite_rows[] = {
         "................",
         "......11........",
@@ -514,4 +559,6 @@ void framebuffer_render_splash(const char *version)
         framebuffer_draw_rect(cx - 8, cy - 8, cw + 16, ch + 16, 0xAA0B1119);
         framebuffer_draw_rect(cx, cy, cw, ch, 0xCC050C16);
     }
+
+    framebuffer_present();
 }

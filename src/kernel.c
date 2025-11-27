@@ -63,7 +63,7 @@ void kernel_main(uint32_t magic, multiboot_info_t *mb_info)
     console_write("Initialization complete. Enabling interrupts...\n");
     __asm__ volatile("sti");
 
-    if (fb_present())
+    if (fb_present() && desktop_autostart_enabled())
     {
         desktop_start();
     }
