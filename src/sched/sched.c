@@ -3,6 +3,16 @@
 #include "ui/console.h"
 #include <string.h>
 
+#ifndef SCHED_DEBUG
+#define SCHED_DEBUG 0
+#endif
+
+#if SCHED_DEBUG
+#define SCHED_LOG(msg) console_write(msg)
+#else
+#define SCHED_LOG(msg) ((void)0)
+#endif
+
 #define MAX_TASKS   8
 #define STACK_SIZE  4096
 
@@ -38,25 +48,28 @@ void sched_init(void)
     current_task->id = 0;
     current_task->state = TASK_RUNNING;
     current_task->frame = NULL;
+    current_task->entry = NULL;
     current_task->stack = NULL;
     strncpy(current_task->name, "main", sizeof(current_task->name) - 1);
     active_tasks = 1;
     current_index = 0;
-    console_write("Scheduler initialized.\n");
+    SCHED_LOG("Scheduler initialized.\n");
 }
 
 static int32_t spawn_task(void (*entry)(void), const char *name)
 {
     int slot = find_free_slot();
     if (slot < 0) {
-        console_write("Scheduler: max tasks reached\n");
+        SCHED_LOG("Scheduler: max tasks reached\n");
         return -1;
     }
-    uint8_t *stack = kmalloc(STACK_SIZE);
+
+    uint8_t *stack = (uint8_t *)kmalloc(STACK_SIZE);
     if (!stack) {
-        console_write("Scheduler: stack allocation failed\n");
+        SCHED_LOG("Scheduler: stack allocation failed\n");
         return -1;
     }
+
     task_entry_t *task = &tasks[slot];
     memset(task, 0, sizeof(*task));
     task->id = next_task_id++;
@@ -68,16 +81,23 @@ static int32_t spawn_task(void (*entry)(void), const char *name)
     uint32_t stack_top = ((uint32_t)stack + STACK_SIZE) & ~0xF;
     interrupt_frame_t *frame = (interrupt_frame_t *)(stack_top - sizeof(interrupt_frame_t));
     memset(frame, 0, sizeof(*frame));
+
+    /* Set up an initial interrupt frame that will jump into task_trampoline */
     frame->gs = frame->fs = frame->es = frame->ds = 0x10;
-    frame->edi = frame->esi = 0;
+    frame->edi = 0;
+    frame->esi = 0;
     frame->ebp = stack_top;
     frame->esp = stack_top;
-    frame->ebx = frame->edx = frame->ecx = frame->eax = 0;
+    frame->ebx = 0;
+    frame->edx = 0;
+    frame->ecx = 0;
+    frame->eax = 0;
     frame->int_no = 0;
     frame->err_code = 0;
     frame->eip = (uint32_t)task_trampoline;
     frame->cs = 0x08;
-    frame->eflags = 0x202;
+    frame->eflags = 0x202; /* IF=1 */
+
     task->frame = frame;
 
     active_tasks++;
@@ -89,12 +109,14 @@ int32_t sched_spawn_named(const char *name)
     if (!name) {
         return -1;
     }
+
     if (!strcmp(name, "spinner")) {
         return spawn_task(task_spinner, "spinner");
     }
     if (!strcmp(name, "counter")) {
         return spawn_task(task_counter, "counter");
     }
+
     return -1;
 }
 
@@ -107,23 +129,43 @@ int sched_kill(uint32_t id)
     if (!task || task->state == TASK_UNUSED) {
         return -1;
     }
+
     if (task == current_task) {
         task->state = TASK_ZOMBIE;
         return 0;
     }
+
     if (task->state == TASK_ZOMBIE) {
         return 0;
     }
+
     destroy_task(task);
     return 0;
 }
 
+/*
+ * Main scheduler entry point called from the timer interrupt.
+ * It returns the interrupt_frame_t* that the CPU should resume with.
+ */
 interrupt_frame_t *sched_tick(interrupt_frame_t *frame)
 {
     if (!current_task) {
         return frame;
     }
 
+    /* Fast path: avoid scheduler overhead when only one task is active */
+    if (active_tasks <= 1) {
+        if (current_task->state == TASK_ZOMBIE) {
+            destroy_task(current_task);
+            current_task = NULL;
+            return frame;
+        }
+        current_task->frame = frame;
+        current_task->state = TASK_RUNNING;
+        return frame;
+    }
+
+    /* Save state of the currently running task and mark it ready */
     if (current_task->state == TASK_RUNNING) {
         current_task->frame = frame;
         current_task->state = TASK_READY;
@@ -134,6 +176,7 @@ interrupt_frame_t *sched_tick(interrupt_frame_t *frame)
         current_task = NULL;
     }
 
+    /* Clean up any completed tasks */
     reap_zombies();
 
     task_entry_t *next = pick_next_task();
@@ -152,10 +195,12 @@ interrupt_frame_t *sched_tick(interrupt_frame_t *frame)
 
     current_task = next;
     current_task->state = TASK_RUNNING;
+
     if (!current_task->frame) {
         current_task->frame = frame;
         return frame;
     }
+
     return current_task->frame;
 }
 
@@ -173,10 +218,10 @@ void sched_for_each(sched_iter_cb cb)
         if (tasks[i].state == TASK_UNUSED) {
             continue;
         }
-        sched_task_info_t info = {
-            .id = tasks[i].id,
-            .state = tasks[i].state
-        };
+        sched_task_info_t info;
+        info.id = tasks[i].id;
+        info.state = tasks[i].state;
+        memset(info.name, 0, sizeof(info.name));
         strncpy(info.name, tasks[i].name, sizeof(info.name) - 1);
         cb(&info);
     }
@@ -185,14 +230,16 @@ void sched_for_each(sched_iter_cb cb)
 const char *sched_state_name(task_state_t state)
 {
     switch (state) {
-    case TASK_READY:   return "READY";
-    case TASK_RUNNING: return "RUNNING";
-    case TASK_SLEEPING:return "SLEEP";
-    case TASK_ZOMBIE:  return "ZOMBIE";
-    case TASK_UNUSED:  return "UNUSED";
-    default:           return "??";
+    case TASK_READY:    return "READY";
+    case TASK_RUNNING:  return "RUNNING";
+    case TASK_SLEEPING: return "SLEEP";
+    case TASK_ZOMBIE:   return "ZOMBIE";
+    case TASK_UNUSED:   return "UNUSED";
+    default:            return "??";
     }
 }
+
+/* --- internal helpers ---------------------------------------------------- */
 
 static int find_free_slot(void)
 {
@@ -260,6 +307,8 @@ static task_entry_t *pick_next_task(void)
     return NULL;
 }
 
+/* --- task trampoline and demo tasks -------------------------------------- */
+
 static void task_trampoline(void)
 {
     __asm__ volatile ("sti");
@@ -267,7 +316,7 @@ static void task_trampoline(void)
         current_task->entry();
     }
     current_task->state = TASK_ZOMBIE;
-    console_write("[sched] task finished\n");
+    SCHED_LOG("[sched] task finished\n");
     for (;;) {
         __asm__ volatile ("hlt");
     }
@@ -277,9 +326,9 @@ static void task_counter(void)
 {
     uint32_t counter = 0;
     while (1) {
-        console_write("[counter] tick ");
+        SCHED_LOG("[counter] tick ");
         console_write_dec(counter++);
-        console_write("\n");
+        SCHED_LOG("\n");
         for (volatile uint32_t i = 0; i < 500000; ++i) {
             __asm__ volatile ("nop");
         }
@@ -291,10 +340,10 @@ static void task_spinner(void)
     const char glyphs[] = "|/-\\";
     uint32_t idx = 0;
     while (1) {
-        console_write("[spinner] ");
+        SCHED_LOG("[spinner] ");
         char buf[2] = { glyphs[idx++ % 4], '\0' };
-        console_write(buf);
-        console_write("\r");
+        SCHED_LOG(buf);
+        SCHED_LOG("\r");
         for (volatile uint32_t i = 0; i < 500000; ++i) {
             __asm__ volatile ("nop");
         }
