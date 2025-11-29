@@ -40,7 +40,8 @@ iso: $(BUILD)/kernel.bin grub/grub.cfg grub/themes/penos/theme.txt grub/themes/p
 run: all
 	qemu-system-i386 -cdrom PenOS.iso \
 		-device virtio-9p-pci,disable-modern=on,fsdev=wsl,mount_tag=wsl \
-		-fsdev local,id=wsl,path=/,security_model=none
+		-fsdev local,id=wsl,path=/,security_model=none \
+		-device virtio-keyboard-pci,disable-modern=on
 
 clean:
 	rm -rf $(BUILD) PenOS.iso

@@ -4,5 +4,6 @@
 
 void keyboard_init(void);
 int keyboard_read_char(void);
+void keyboard_push_char(char c);
 
 #endif

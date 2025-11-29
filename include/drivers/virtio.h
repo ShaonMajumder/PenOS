@@ -7,7 +7,24 @@
 // VirtIO Device IDs
 #define VIRTIO_DEV_NETWORK   0x1000
 #define VIRTIO_DEV_BLOCK     0x1001
+#define VIRTIO_DEV_INPUT     0x1052  // VirtIO Input
 #define VIRTIO_DEV_9P        0x1009  // 9P filesystem
+
+// VirtIO Input Event
+typedef struct {
+    uint16_t type;
+    uint16_t code;
+    uint32_t value;
+} __attribute__((packed)) virtio_input_event_t;
+
+// VirtIO Input Config (simplified)
+typedef struct {
+    uint8_t select;
+    uint8_t subsel;
+    uint8_t size;
+    uint8_t reserved[5];
+    uint8_t u[128];
+} __attribute__((packed)) virtio_input_config_t;
 
 // VirtIO Status Register Bits
 #define VIRTIO_STATUS_ACKNOWLEDGE  1
@@ -85,5 +102,9 @@ int virtqueue_add_chain(virtqueue_t *vq, virtio_buf_desc_t *bufs, int count);
 void virtqueue_kick(virtio_device_t *dev);
 int virtqueue_get_buf(virtqueue_t *vq, uint32_t *len);
 
+
+// VirtIO Input Functions
+int virtio_input_init(void);
+void virtio_input_poll(void);
 
 #endif

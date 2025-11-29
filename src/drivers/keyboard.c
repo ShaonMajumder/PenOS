@@ -150,7 +150,7 @@ static char translate_scancode(uint8_t sc)
     return c;
 }
 
-static void buffer_put(char c)
+void keyboard_push_char(char c)
 {
     int next = (head + 1) % BUFFER_SIZE;
     if (next != tail) {
@@ -192,7 +192,7 @@ static void keyboard_callback(interrupt_frame_t *frame)
     }
     char c = translate_scancode(sc);
     if (c) {
-        buffer_put(c);
+        keyboard_push_char(c);
     }
 }
 

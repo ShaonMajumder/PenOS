@@ -9,6 +9,7 @@
 #include <string.h>
 #include "fs/fs.h"
 #include "fs/9p.h"
+#include "drivers/virtio.h"
 
 typedef struct
 {
@@ -219,6 +220,8 @@ static int getline_block(char *buffer, int max)
         while ((c = keyboard_read_char()) == -1)
         {
             /* busy-wait for keypress */
+            virtio_input_poll();
+            __asm__ volatile("hlt");
         }
         char ch = (char)c;
         if (ch == '\r' || ch == '\n')

@@ -9,6 +9,7 @@
 #include "drivers/keyboard.h"
 #include "drivers/mouse.h"
 #include "drivers/pci.h"
+#include "drivers/virtio.h"
 #include "mem/pmm.h"
 #include "mem/paging.h"
 #include "mem/heap.h"
@@ -43,6 +44,7 @@ void kernel_main(uint32_t magic, multiboot_info_t *mb_info)
     }
 
     console_show_boot_splash(PENOS_VERSION);
+    console_show_boot_splash(PENOS_VERSION);
     banner();
 
     gdt_init();
@@ -53,10 +55,19 @@ void kernel_main(uint32_t magic, multiboot_info_t *mb_info)
     pmm_init(mb_info);
     paging_init();
     heap_init();
+    
+    // Initialize drivers
     keyboard_init();
+    mouse_init();
+    pci_init();
+    
+    // Initialize VirtIO drivers
+    virtio_input_init();
+    
     syscall_init();
     sched_init();
-    pci_init();
+    
+    // Initialize filesystem
     fs_init();
 
     console_write("Initialization complete. Enabling interrupts...\n");
