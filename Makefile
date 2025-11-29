@@ -42,7 +42,10 @@ run: all
 		-device virtio-9p-pci,disable-modern=on,fsdev=wsl,mount_tag=wsl \
 		-fsdev local,id=wsl,path=/,security_model=none \
 		-device virtio-keyboard-pci,disable-modern=on \
-		-device virtio-mouse-pci,disable-modern=on
+		-device virtio-mouse-pci,disable-modern=on \
+		-device virtio-serial-pci,disable-modern=on \
+		-chardev stdio,id=cons0,mux=on \
+		-device virtconsole,chardev=cons0
 
 clean:
 	rm -rf $(BUILD) PenOS.iso

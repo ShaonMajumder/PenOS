@@ -7,6 +7,7 @@
 // VirtIO Device IDs
 #define VIRTIO_DEV_NETWORK   0x1000
 #define VIRTIO_DEV_BLOCK     0x1001
+#define VIRTIO_DEV_CONSOLE   0x1003  // Serial console
 #define VIRTIO_DEV_INPUT     0x1052  // VirtIO Input
 #define VIRTIO_DEV_9P        0x1009  // 9P filesystem
 
