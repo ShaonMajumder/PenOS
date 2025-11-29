@@ -71,16 +71,7 @@ int virtio_init(pci_device_t *pci_dev, virtio_device_t *dev) {
     // Write guest features (accept all for now)
     virtio_write32(dev, VIRTIO_PCI_GUEST_FEATURES, features);
     
-    // Set FEATURES_OK
-    status |= VIRTIO_STATUS_FEATURES_OK;
-    virtio_write8(dev, VIRTIO_PCI_STATUS, status);
-    
-    // Verify FEATURES_OK
-    status = virtio_read8(dev, VIRTIO_PCI_STATUS);
-    if (!(status & VIRTIO_STATUS_FEATURES_OK)) {
-        console_write("VirtIO: Features not accepted\n");
-        return -1;
-    }
+    // Legacy VirtIO does not use FEATURES_OK
     
     return 0;
 }
@@ -107,17 +98,28 @@ void virtqueue_init(virtio_device_t *dev) {
     size_t used_size = sizeof(vring_used_t);
     size_t total_size = desc_size + avail_size + used_size + 4096; // Add padding
     
-    void *vq_mem = kmalloc(total_size);
-    if (!vq_mem) {
+    // Allocate extra for alignment
+    void *vq_mem_raw = kmalloc(total_size + 4096);
+    if (!vq_mem_raw) {
         console_write("VirtIO: Failed to allocate virtqueue\n");
         return;
     }
+    
+    // Align to 4KB
+    uint32_t addr = (uint32_t)vq_mem_raw;
+    uint32_t aligned_addr = (addr + 4095) & ~4095;
+    void *vq_mem = (void *)aligned_addr;
+    
     memset(vq_mem, 0, total_size);
     
     // Set up pointers
+    // Legacy VirtIO: Used ring must be aligned to 4096 bytes
+    uint32_t avail_offset = desc_size;
+    uint32_t used_offset = (avail_offset + avail_size + 4095) & ~4095;
+    
     dev->vq.desc = (vring_desc_t *)vq_mem;
-    dev->vq.avail = (vring_avail_t *)((uint8_t *)vq_mem + desc_size);
-    dev->vq.used = (vring_used_t *)((uint8_t *)dev->vq.avail + avail_size);
+    dev->vq.avail = (vring_avail_t *)((uint8_t *)vq_mem + avail_offset);
+    dev->vq.used = (vring_used_t *)((uint8_t *)vq_mem + used_offset);
     dev->vq.num = queue_size;
     dev->vq.last_used_idx = 0;
     dev->vq.free_head = 0;
@@ -159,10 +161,12 @@ int virtqueue_add_buf(virtqueue_t *vq, void *buf, uint32_t len, int write) {
     vq->desc[idx].addr = (uint64_t)paging_virt_to_phys((uint32_t)buf);
     vq->desc[idx].len = len;
     vq->desc[idx].flags = write ? VRING_DESC_F_WRITE : 0;
+    
+    uint16_t next_desc = vq->desc[idx].next;
     vq->desc[idx].next = 0;
     
     // Update free list
-    vq->free_head = vq->desc[head].next;
+    vq->free_head = next_desc;
     vq->num_free--;
     
     // Add to available ring
@@ -173,16 +177,66 @@ int virtqueue_add_buf(virtqueue_t *vq, void *buf, uint32_t len, int write) {
     return head;
 }
 
+// Add chained buffers to virtqueue
+int virtqueue_add_chain(virtqueue_t *vq, virtio_buf_desc_t *bufs, int count) {
+    if (vq->num_free < count) {
+        return -1;  // Not enough free descriptors
+    }
+    
+    uint16_t head = vq->free_head;
+    uint16_t curr = head;
+    
+    for (int i = 0; i < count; i++) {
+        uint16_t next_desc = vq->desc[curr].next;
+        
+        // Populate descriptor
+        vq->desc[curr].addr = (uint64_t)paging_virt_to_phys((uint32_t)bufs[i].buf);
+        vq->desc[curr].len = bufs[i].len;
+        
+        uint16_t flags = 0;
+        if (bufs[i].write) {
+            flags |= VRING_DESC_F_WRITE;
+        }
+        
+        if (i < count - 1) {
+            flags |= VRING_DESC_F_NEXT;
+        } else {
+            vq->desc[curr].next = 0;
+            vq->free_head = next_desc;
+        }
+        
+        vq->desc[curr].flags = flags;
+        curr = next_desc;
+    }
+    
+    vq->num_free -= count;
+    
+    // Add to available ring
+    uint16_t avail_idx = vq->avail->idx;
+    vq->avail->ring[avail_idx % vq->num] = head;
+    
+    // Memory barrier
+    __asm__ volatile ("" ::: "memory");
+    
+    vq->avail->idx = avail_idx + 1;
+    
+    return head;
+}
+
 // Notify device
 void virtqueue_kick(virtio_device_t *dev) {
+    __asm__ volatile ("" ::: "memory");
     virtio_write16(dev, VIRTIO_PCI_QUEUE_NOTIFY, 0);
 }
 
 // Get completed buffer
 int virtqueue_get_buf(virtqueue_t *vq, uint32_t *len) {
-    if (vq->last_used_idx == vq->used->idx) {
+    volatile uint16_t *used_idx_ptr = &vq->used->idx;
+    if (vq->last_used_idx == *used_idx_ptr) {
         return -1;  // No new completions
     }
+    
+    __asm__ volatile ("" ::: "memory");
     
     uint16_t used_idx = vq->last_used_idx % vq->num;
     uint32_t desc_idx = vq->used->ring[used_idx].id;
@@ -191,10 +245,19 @@ int virtqueue_get_buf(virtqueue_t *vq, uint32_t *len) {
         *len = vq->used->ring[used_idx].len;
     }
     
-    // Return descriptor to free list
-    vq->desc[desc_idx].next = vq->free_head;
-    vq->free_head = desc_idx;
-    vq->num_free++;
+    // Return descriptor chain to free list
+    uint16_t curr = desc_idx;
+    while (1) {
+        uint16_t next = vq->desc[curr].next;
+        int has_next = vq->desc[curr].flags & VRING_DESC_F_NEXT;
+        
+        vq->desc[curr].next = vq->free_head;
+        vq->free_head = curr;
+        vq->num_free++;
+        
+        if (!has_next) break;
+        curr = next;
+    }
     
     vq->last_used_idx++;
     

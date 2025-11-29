@@ -9,6 +9,9 @@ static virtio_device_t p9_dev;
 static uint16_t p9_tag = 0;
 static uint32_t next_fid = 1;
 
+static char p9_cwd[256] = "/";  // Current working directory
+static int p9_initialized = 0;
+
 #define P9_MAX_MSG_SIZE 8192
 
 static uint8_t tx_buffer[P9_MAX_MSG_SIZE];
@@ -45,26 +48,33 @@ static uint32_t write_string(uint8_t *buf, const char *str) {
 
 // Send 9p message and receive response
 static int p9_rpc(uint8_t *tx, uint32_t tx_len, uint8_t *rx, uint32_t *rx_len) {
-    // Add TX buffer to virtqueue
-    int tx_idx = virtqueue_add_buf(&p9_dev.vq, tx, tx_len, 0);
-    if (tx_idx < 0) {
-        return -1;
-    }
+    // Create descriptor chain
+    virtio_buf_desc_t bufs[2];
     
-    // Add RX buffer to virtqueue
-    int rx_idx = virtqueue_add_buf(&p9_dev.vq, rx, P9_MAX_MSG_SIZE, 1);
-    if (rx_idx < 0) {
+    // TX buffer (device-readable)
+    bufs[0].buf = tx;
+    bufs[0].len = tx_len;
+    bufs[0].write = 0;
+    
+    // RX buffer (device-writable)
+    bufs[1].buf = rx;
+    bufs[1].len = P9_MAX_MSG_SIZE;
+    bufs[1].write = 1;
+    
+    // Add chain to virtqueue
+    int idx = virtqueue_add_chain(&p9_dev.vq, bufs, 2);
+    if (idx < 0) {
         return -1;
     }
     
     // Kick device
     virtqueue_kick(&p9_dev);
     
-    // Wait for response (simple polling)
-    for (int i = 0; i < 1000000; i++) {
+    // Wait for response
+    for (int i = 0; i < 10000000; i++) {
         uint32_t len;
-        int idx = virtqueue_get_buf(&p9_dev.vq, &len);
-        if (idx >= 0) {
+        int ret_idx = virtqueue_get_buf(&p9_dev.vq, &len);
+        if (ret_idx >= 0) {
             if (rx_len) *rx_len = len;
             return 0;
         }
@@ -108,6 +118,7 @@ int p9_init(void) {
     }
     
     console_write("9P: Initialized successfully\n");
+    p9_initialized = 1;
     return 0;
 }
 
@@ -175,6 +186,10 @@ int p9_attach(const char *uname, const char *aname) {
     // aname
     p += write_string(p, aname);
     
+    // n_uname (numeric ID) - required for 9P2000.L
+    write_u32(p, 0);  // 0 for root
+    p += 4;
+    
     uint32_t size = p - tx_buffer;
     write_u32(tx_buffer, size);
     
@@ -194,24 +209,287 @@ int p9_attach(const char *uname, const char *aname) {
 
 // Walk to a file
 int p9_walk(uint32_t fid, uint32_t newfid, const char *path) {
-    // Simplified: just return newfid
-    // Full implementation would split path and send walk elements
-    return newfid;
-}
-
-// Open file
-int p9_open(uint32_t fid, uint8_t mode) {
-    // Simplified stub
+    uint8_t *p = tx_buffer;
+    p += 4;
+    *p++ = P9_TWALK;
+    write_u16(p, p9_tag++);
+    p += 2;
+    
+    write_u32(p, fid);
+    p += 4;
+    write_u32(p, newfid);
+    p += 4;
+    
+    // Split path by '/' and count components
+    if (!path || *path == '\0') {
+        // Clone fid
+        write_u16(p, 0);
+        p += 2;
+    } else {
+        // Count and parse path components
+        char path_copy[256];
+        strcpy(path_copy, path);
+        
+        // Count components
+        uint16_t nwname = 0;
+        char *components[32];
+        char *token = path_copy;
+        
+        while (*token) {
+            // Skip leading slashes
+            while (*token == '/') token++;
+            if (*token == '\0') break;
+            
+            components[nwname++] = token;
+            
+            // Find end of component
+            while (*token && *token != '/') token++;
+            if (*token == '/') {
+                *token = '\0';
+                token++;
+            }
+        }
+        
+        write_u16(p, nwname);
+        p += 2;
+        
+        // Write each component as a string
+        for (int i = 0; i < nwname; i++) {
+            p += write_string(p, components[i]);
+        }
+    }
+    
+    uint32_t size = p - tx_buffer;
+    write_u32(tx_buffer, size);
+    
+    uint32_t rx_len;
+    if (p9_rpc(tx_buffer, size, rx_buffer, &rx_len) != 0) {
+        return -1;
+    }
+    
+    if (rx_buffer[4] != P9_RWALK) {
+        return -1;
+    }
+    
     return 0;
 }
 
-// Read file
-int p9_read(uint32_t fid, uint64_t offset, uint32_t count, void *data) {
-    // Simplified stub - would send Tread message
+// Open file (LOPEN for 9P2000.L)
+int p9_open(uint32_t fid, uint32_t flags) {
+    uint8_t *p = tx_buffer;
+    p += 4;
+    *p++ = P9_TLOPEN;
+    write_u16(p, p9_tag++);
+    p += 2;
+    
+    write_u32(p, fid);
+    p += 4;
+    write_u32(p, flags);
+    p += 4;
+    
+    uint32_t size = p - tx_buffer;
+    write_u32(tx_buffer, size);
+    
+    uint32_t rx_len;
+    if (p9_rpc(tx_buffer, size, rx_buffer, &rx_len) != 0) {
+        return -1;
+    }
+    
+    if (rx_buffer[4] != P9_RLOPEN) {
+        return -1;
+    }
+    
     return 0;
+}
+
+// Read directory (READDIR for 9P2000.L)
+int p9_readdir(uint32_t fid, uint64_t offset, uint32_t count, void *data) {
+    uint8_t *p = tx_buffer;
+    p += 4;
+    *p++ = P9_TREADDIR;
+    write_u16(p, p9_tag++);
+    p += 2;
+    
+    write_u32(p, fid);
+    p += 4;
+    
+    // offset (64-bit)
+    write_u32(p, (uint32_t)offset);
+    p += 4;
+    write_u32(p, (uint32_t)(offset >> 32));
+    p += 4;
+    
+    write_u32(p, count);
+    p += 4;
+    
+    uint32_t size = p - tx_buffer;
+    write_u32(tx_buffer, size);
+    
+    uint32_t rx_len;
+    if (p9_rpc(tx_buffer, size, rx_buffer, &rx_len) != 0) {
+        return -1;
+    }
+    
+    if (rx_buffer[4] != P9_RREADDIR) {
+        return -1;
+    }
+    
+    // Copy data
+    uint32_t count_rx = read_u32(rx_buffer + 7);
+    if (count_rx > count) count_rx = count;
+    
+    memcpy(data, rx_buffer + 11, count_rx);
+    return count_rx;
 }
 
 // Close file
 void p9_clunk(uint32_t fid) {
-    // Simplified stub - would send Tclunk message
+    uint8_t *p = tx_buffer;
+    p += 4;
+    *p++ = P9_TCLUNK;
+    write_u16(p, p9_tag++);
+    p += 2;
+    
+    write_u32(p, fid);
+    p += 4;
+    
+    uint32_t size = p - tx_buffer;
+    write_u32(tx_buffer, size);
+    
+    p9_rpc(tx_buffer, size, rx_buffer, NULL);
+}
+
+// Get current working directory
+const char* p9_getcwd(void) {
+    return p9_cwd;
+}
+
+// Change directory
+int p9_change_directory(const char *path) {
+    if (!p9_initialized) {
+        return -1;
+    }
+    
+    if (strcmp(path, ".") == 0) {
+        return 0;
+    }
+    
+    char new_path[256];
+    
+    if (strcmp(path, "..") == 0) {
+        if (strcmp(p9_cwd, "/") == 0) {
+            return 0;
+        }
+        
+        int len = strlen(p9_cwd);
+        int i;
+        for (i = len - 1; i >= 0; i--) {
+            if (p9_cwd[i] == '/') {
+                break;
+            }
+        }
+        
+        if (i == 0) {
+            strcpy(new_path, "/");
+        } else {
+            memcpy(new_path, p9_cwd, i);
+            new_path[i] = '\0';
+        }
+    } else if (path[0] == '/') {
+        strcpy(new_path, path);
+    } else {
+        if (strcmp(p9_cwd, "/") == 0) {
+            strcpy(new_path, "/");
+            strcat(new_path, path);
+        } else {
+            strcpy(new_path, p9_cwd);
+            strcat(new_path, "/");
+            strcat(new_path, path);
+        }
+    }
+    
+    // Verify directory exists
+    uint32_t test_fid = next_fid++;
+    
+    // Remove leading slash for walk
+    const char *walk_path = new_path;
+    if (walk_path[0] == '/') {
+        walk_path++;
+    }
+    
+    if (p9_walk(0, test_fid, walk_path) != 0) {
+        return -1;
+    }
+    
+    if (p9_open(test_fid, 0) != 0) {
+        p9_clunk(test_fid);
+        return -1;
+    }
+    
+    p9_clunk(test_fid);
+    strcpy(p9_cwd, new_path);
+    
+    return 0;
+}
+
+// List directory
+int p9_list_directory(const char *path) {
+    if (!p9_initialized) {
+        return -1;
+    }
+
+    const char *target = path ? path : p9_cwd;
+    uint32_t fid = next_fid++;
+    
+    // Remove leading slash for walk
+    const char *walk_path = target;
+    if (walk_path[0] == '/') {
+        walk_path++;
+    }
+    
+    if (p9_walk(0, fid, walk_path) != 0) {
+        return -1;
+    }
+    
+    if (p9_open(fid, 0) != 0) {
+        p9_clunk(fid);
+        return -1;
+    }
+    
+    // Read directory
+    uint8_t buf[4096];
+    int count = p9_readdir(fid, 0, sizeof(buf), buf);
+    
+    if (count < 0) {
+        p9_clunk(fid);
+        return -1;
+    }
+    
+    if (count > 0) {
+        int offset = 0;
+        while (offset < count) {
+            if (offset + 24 > count) break;
+            
+            uint8_t type = buf[offset + 21];
+            uint16_t name_len = buf[offset + 22] | (buf[offset + 23] << 8);
+            
+            if (offset + 24 + name_len > count) break;
+            
+            char name[256];
+            if (name_len > 255) name_len = 255;
+            memcpy(name, buf + offset + 24, name_len);
+            name[name_len] = '\0';
+            
+            console_write(name);
+            if (type == 4) {
+                console_write("/");
+            }
+            console_write("\n");
+            
+            offset += 24 + name_len;
+        }
+    }
+    
+    p9_clunk(fid);
+    return 0;
 }

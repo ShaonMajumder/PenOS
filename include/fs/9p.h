@@ -35,13 +35,30 @@ typedef struct {
     uint16_t tag;
 } __attribute__((packed)) p9_hdr_t;
 
+// 9P2000.L Opcodes
+#define P9_TLOPEN    12
+#define P9_RLOPEN    13
+#define P9_TREADDIR  40
+#define P9_RREADDIR  41
+
+// 9P2000.L dirent structure
+typedef struct {
+    p9_qid_t qid;
+    uint64_t offset;
+    uint8_t type;
+    char name[256];
+} p9_dirent_t;
+
 // Functions
 int p9_init(void);
 int p9_version(void);
 int p9_attach(const char *uname, const char *aname);
 int p9_walk(uint32_t fid, uint32_t newfid, const char *path);
-int p9_open(uint32_t fid, uint8_t mode);
-int p9_read(uint32_t fid, uint64_t offset, uint32_t count, void *data);
+int p9_open(uint32_t fid, uint32_t flags);
+int p9_readdir(uint32_t fid, uint64_t offset, uint32_t count, void *data);
 void p9_clunk(uint32_t fid);
+int p9_list_directory(const char *path);
+const char* p9_getcwd(void);
+int p9_change_directory(const char *path);
 
 #endif

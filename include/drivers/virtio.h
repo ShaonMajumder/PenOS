@@ -70,10 +70,18 @@ typedef struct {
     uint8_t status;
 } virtio_device_t;
 
+// Buffer descriptor for chaining
+typedef struct {
+    void *buf;
+    uint32_t len;
+    int write; // 1 for device-writable (RX), 0 for device-readable (TX)
+} virtio_buf_desc_t;
+
 // Functions
 int virtio_init(pci_device_t *pci_dev, virtio_device_t *dev);
 void virtqueue_init(virtio_device_t *dev);
 int virtqueue_add_buf(virtqueue_t *vq, void *buf, uint32_t len, int write);
+int virtqueue_add_chain(virtqueue_t *vq, virtio_buf_desc_t *bufs, int count);
 void virtqueue_kick(virtio_device_t *dev);
 int virtqueue_get_buf(virtqueue_t *vq, uint32_t *len);
 

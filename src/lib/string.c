@@ -48,6 +48,24 @@ char *strncpy(char *dst, const char *src, size_t n)
     return dst;
 }
 
+char *strcpy(char *dst, const char *src)
+{
+    char *ret = dst;
+    while ((*dst++ = *src++))
+        ;
+    return ret;
+}
+
+char *strcat(char *dst, const char *src)
+{
+    char *ret = dst;
+    while (*dst)
+        dst++;
+    while ((*dst++ = *src++))
+        ;
+    return ret;
+}
+
 void *memcpy(void *dst, const void *src, size_t n)
 {
     unsigned char *d = (unsigned char *)dst;

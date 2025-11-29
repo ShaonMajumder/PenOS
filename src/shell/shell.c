@@ -8,6 +8,7 @@
 #include "sys/power.h"
 #include <string.h>
 #include "fs/fs.h"
+#include "fs/9p.h"
 
 typedef struct
 {
@@ -70,6 +71,51 @@ static void shell_handle_break(const char *label)
     }
 }
 
+/* ---------- Tab Completion Helpers ---------- */
+
+static void redraw_prompt_with_buffer(const char *buffer) {
+    console_putc('\r');
+    // Clear line
+    for (int i = 0; i < 80; i++) console_putc(' ');
+    console_putc('\r');
+    console_write("PenOS:");
+    console_write(p9_getcwd());
+    console_write("> ");
+    console_write(buffer);
+}
+
+static int complete_command(char *buffer, int current_len) {
+    const char *commands[] = {
+        "help", "clear", "echo", "ticks", "sysinfo", "ps", "spawn", "kill",
+        "halt", "shutdown", "pwd", "cd", "ls", "cat", NULL
+    };
+    
+    char matches[16][32];
+    int match_count = 0;
+    
+    for (int i = 0; commands[i]; i++) {
+        if (strncmp(buffer, commands[i], current_len) == 0) {
+            if (match_count < 16) {
+                strcpy(matches[match_count++], commands[i]);
+            }
+        }
+    }
+    
+    if (match_count == 1) {
+        strcpy(buffer, matches[0]);
+        return strlen(buffer);
+    } else if (match_count > 1) {
+        console_putc('\n');
+        for (int i = 0; i < match_count; i++) {
+            console_write(matches[i]);
+            console_write("  ");
+        }
+        console_putc('\n');
+    }
+    
+    return current_len;
+}
+
 static int getline_block(char *buffer, int max)
 {
     int len = 0;
@@ -106,7 +152,27 @@ static int getline_block(char *buffer, int max)
             shell_handle_break("^C");
             return -1;
         }
-        else
+        else if (ch == '\t')
+        { /* TAB - autocomplete */
+            buffer[len] = '\0';
+            
+            // Check if buffer has spaces (command vs path completion)
+            int has_space = 0;
+            for (int i = 0; i < len; i++) {
+                if (buffer[i] == ' ') {
+                    has_space = 1;
+                    break;
+                }
+            }
+            
+            if (!has_space && len > 0) {
+                // Command completion
+                len = complete_command(buffer, len);
+                redraw_prompt_with_buffer(buffer);
+            }
+            // File completion would go here in else if (has_space) block
+        }
+        else if (ch >= 32 && ch < 127)
         {
             buffer[len++] = ch;
             console_putc(ch);
@@ -200,7 +266,7 @@ static void cmd_ps(void)
 
 static void cmd_pwd(void)
 {
-    console_write(fs_getcwd());
+    console_write(p9_getcwd());
     console_putc('\n');
 }
 
@@ -212,36 +278,25 @@ static void cmd_cd(const char *args)
     }
     if (*args == '\0')
     {
-        // No argument: cd to root
         args = "/";
     }
-    if (fs_chdir(args) != 0)
+    if (p9_change_directory(args) != 0)
     {
-        console_write("cd: cannot change directory to '");
+        console_write("cd: '");
         console_write(args);
-        console_write("': No such directory\n");
-        console_write("(Note: Only '/' and '.' are supported in current version)\n");
+        console_write("' not found\n");
+        if (args[0] != '/') {
+            console_write("(Relative to ");
+            console_write(p9_getcwd());
+            console_write(")\n");
+        }
     }
 }
 
 static void cmd_ls(void)
 {
-    size_t count = fs_file_count();
-    if (count == 0)
-    {
-        console_write("[fs] no files\n");
-        return;
-    }
-    console_write("[fs] files:\n");
-    for (size_t i = 0; i < count; ++i)
-    {
-        const char *name = fs_file_name(i);
-        uint32_t size = (uint32_t)fs_file_size(i);
-        console_write("  ");
-        console_write(name ? name : "(null)");
-        console_write("  (");
-        console_write_dec(size);
-        console_write(" bytes)\n");
+    if (p9_list_directory(NULL) != 0) {
+        console_write("Failed to list directory.\n");
     }
 }
 
@@ -350,7 +405,9 @@ void shell_run(void)
 
     while (1)
     {
-        console_write("PenOS> ");
+        console_write("PenOS:");
+        console_write(p9_getcwd());
+        console_write("> ");
         int len = getline_block(input, sizeof(input));
         if (len < 0)
         {
