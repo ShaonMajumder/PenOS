@@ -1,0 +1,67 @@
+diff --git a/src/shell/shell.c b/src/shell/shell.c
+index d9d266f..virtio-mouse 100644
+--- a/src/shell/shell.c
++++ b/src/shell/shell.c
+@@ -9,6 +9,7 @@
+ #include <string.h>
+ #include "fs/fs.h"
+ #include "fs/9p.h"
++#include "drivers/mouse.h"
+ #include "drivers/virtio.h"
+ 
+ typedef struct
+@@ -291,6 +292,7 @@ static int getline_block(char *buffer, int max)
+ 
+ /* ---------- Commands ---------- */
+ 
++// Help command - lists all available commands
+ static void cmd_help(void)
+ {
+     console_write("\nPenOS shell - available commands:\n");
+@@ -304,10 +306,11 @@ static void cmd_help(void)
+     console_write("  spawn <name>  - Start a demo task (counter|spinner)\n");
+     console_write("  kill 3\n");
+ #ifdef FS_FS_H
+     console_write("  pwd\n");
+     console_write("  cd /\n");
+     console_write("  ls\n");
++    console_write("  mouse         - Display mouse position and buttons\n");
+     console_write("  cat hello.txt\n");
+ #endif
+     console_putc('\n');
+@@ -408,6 +411,23 @@ static void cmd_cat(const char *args)
+     }
+ }
+ 
++// Mouse command - displays current mouse position and button states
++static void cmd_mouse(void)
++{
++    int x, y;
++    mouse_get_position(&x, &y);
++    int buttons = mouse_get_buttons();
++    
++    console_write("Mouse Position: X=");
++    console_write_dec(x);
++    console_write(" Y=");
++    console_write_dec(y);
++    console_write(" Buttons=[");
++    if (buttons & 1) console_write("L");
++    if (buttons & 2) console_write("R");
++    if (buttons & 4) console_write("M");
++    console_write("]\n");
++}
++
+ /* ---------- spawn / kill helpers ---------- */
+ 
+ static int parse_uint(const char *str, uint32_t *out)
+@@ -545,6 +565,10 @@ void shell_run(void)
+         {
+             break;
+         }
++        else if (!strcmp(input, "mouse"))
++        {
++            cmd_mouse();
++        }
+         else if (!strcmp(input, "shutdown"))
+         {
+             console_write("Powering off...\n");
