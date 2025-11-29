@@ -7,13 +7,15 @@
 #include "arch/x86/timer.h"
 #include "arch/x86/pic.h"
 #include "drivers/keyboard.h"
+#include "drivers/mouse.h"
+#include "drivers/pci.h"
 #include "mem/pmm.h"
 #include "mem/paging.h"
 #include "mem/heap.h"
 #include "sched/sched.h"
 #include "sys/syscall.h"
 #include "shell/shell.h"
-#include "apps/sysinfo.h"
+#include "fs/fs.h"
 
 #ifndef PENOS_VERSION
 #define PENOS_VERSION "dev"
@@ -54,6 +56,8 @@ void kernel_main(uint32_t magic, multiboot_info_t *mb_info)
     keyboard_init();
     syscall_init();
     sched_init();
+    pci_init();
+    fs_init();
 
     console_write("Initialization complete. Enabling interrupts...\n");
     __asm__ volatile ("sti");

@@ -2,7 +2,7 @@ ARCH=i386
 CC ?= gcc
 LD ?= ld
 VERSION_STRING := $(strip $(shell cat VERSION))
-CFLAGS := -m32 -ffreestanding -fno-stack-protector -fno-pic -O2 -Wall -Wextra -Iinclude -DPENOS_VERSION=\"$(VERSION_STRING)\"
+CFLAGS := -m32 -ffreestanding -fno-stack-protector -fno-pic -fno-builtin-memset -fno-builtin-memcpy -fno-builtin-memmove -O0 -Wall -Wextra -Iinclude -D_FORTIFY_SOURCE=0 -DPENOS_VERSION=\"$(VERSION_STRING)\"
 LDFLAGS := -m elf_i386 -T linker.ld -nostdlib
 BUILD := build
 SRCS := $(shell find src -name "*.c")
@@ -38,7 +38,9 @@ iso: $(BUILD)/kernel.bin grub/grub.cfg grub/themes/penos/theme.txt grub/themes/p
 	grub-mkrescue -o PenOS.iso $(BUILD)/iso
 
 run: all
-	qemu-system-i386 -cdrom PenOS.iso
+	qemu-system-i386 -cdrom PenOS.iso \
+		-device virtio-9p-pci,fsdev=wsl,mount_tag=wsl \
+		-fsdev local,id=wsl,path=/mnt/wslg/distro/root,security_model=none
 
 clean:
 	rm -rf $(BUILD) PenOS.iso

@@ -7,6 +7,7 @@
 #include "sched/sched.h"
 #include "sys/power.h"
 #include <string.h>
+#include "fs/fs.h"
 
 typedef struct
 {
@@ -131,6 +132,8 @@ static void cmd_help(void)
     console_write("  halt              Exit the shell (CPU will halt)\n");
     console_write("  shutdown          Try to power off the machine\n");
 #ifdef FS_FS_H
+    console_write("  pwd               Print current working directory\n");
+    console_write("  cd <dir>          Change directory (currently only / supported)\n");
     console_write("  ls                List files in the in-memory filesystem\n");
     console_write("  cat <file>        Show contents of a file\n");
 #endif
@@ -141,6 +144,8 @@ static void cmd_help(void)
     console_write("  ps\n");
     console_write("  kill 3\n");
 #ifdef FS_FS_H
+    console_write("  pwd\n");
+    console_write("  cd /\n");
     console_write("  ls\n");
     console_write("  cat hello.txt\n");
 #endif
@@ -191,7 +196,33 @@ static void cmd_ps(void)
     sched_for_each(ps_callback);
 }
 
-/* Optional: filesystem commands (ls / cat) */
+/* Optional: filesystem commands (pwd / cd / ls / cat) */
+
+static void cmd_pwd(void)
+{
+    console_write(fs_getcwd());
+    console_putc('\n');
+}
+
+static void cmd_cd(const char *args)
+{
+    while (*args == ' ')
+    {
+        ++args;
+    }
+    if (*args == '\0')
+    {
+        // No argument: cd to root
+        args = "/";
+    }
+    if (fs_chdir(args) != 0)
+    {
+        console_write("cd: cannot change directory to '");
+        console_write(args);
+        console_write("': No such directory\n");
+        console_write("(Note: Only '/' and '.' are supported in current version)\n");
+    }
+}
 
 static void cmd_ls(void)
 {
@@ -363,6 +394,18 @@ void shell_run(void)
         {
             cmd_kill(input + 5);
 #ifdef FS_FS_H
+        }
+        else if (!strcmp(input, "pwd"))
+        {
+            cmd_pwd();
+        }
+        else if (!strncmp(input, "cd ", 3))
+        {
+            cmd_cd(input + 3);
+        }
+        else if (!strcmp(input, "cd"))
+        {
+            cmd_cd("");
         }
         else if (!strcmp(input, "ls"))
         {
