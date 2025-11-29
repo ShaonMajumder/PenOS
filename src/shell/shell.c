@@ -116,6 +116,100 @@ static int complete_command(char *buffer, int current_len) {
     return current_len;
 }
 
+static int complete_path(char *buffer, int current_len, int path_start) {
+    // Extract the path to complete
+    char path_to_complete[128];
+    strcpy(path_to_complete, buffer + path_start);
+    
+    // Split into directory and prefix
+    char dir_path[256];
+    char prefix[128];
+    char *last_slash = NULL;
+    
+    for (int i = 0; path_to_complete[i]; i++) {
+        if (path_to_complete[i] == '/') {
+            last_slash = &path_to_complete[i];
+        }
+    }
+    
+    if (last_slash) {
+        int dir_len = last_slash - path_to_complete + 1;
+        memcpy(dir_path, path_to_complete, dir_len);
+        dir_path[dir_len] = '\0';
+        strcpy(prefix, last_slash + 1);
+    } else {
+        strcpy(dir_path, ".");
+        strcpy(prefix, path_to_complete);
+    }
+    
+    // Read directory and find matches
+    uint32_t fid = 1000 + (uint32_t)timer_ticks() % 1000;
+    const char *target = (strcmp(dir_path, ".") == 0) ? p9_getcwd() : dir_path;
+    
+    const char *walk_path = target;
+    if (walk_path[0] == '/') walk_path++;
+    
+    if (p9_walk(0, fid, walk_path) == 0 && p9_open(fid, 0) == 0) {
+        uint8_t dir_buf[4096];
+        int count = p9_readdir(fid, 0, sizeof(dir_buf), dir_buf);
+        
+        char matches[16][128];
+        int match_count = 0;
+        int prefix_len = strlen(prefix);
+        
+        if (count > 0) {
+            int offset = 0;
+            while (offset < count && match_count < 16) {
+                if (offset + 24 > count) break;
+                
+                uint8_t type = dir_buf[offset + 21];
+                uint16_t name_len = dir_buf[offset + 22] | (dir_buf[offset + 23] << 8);
+                
+                if (offset + 24 + name_len > count) break;
+                
+                char name[256];
+                if (name_len > 255) name_len = 255;
+                memcpy(name, dir_buf + offset + 24, name_len);
+                name[name_len] = '\0';
+                
+                // Skip hidden files unless prefix starts with .
+                if (name[0] != '.' || (prefix_len > 0 && prefix[0] == '.')) {
+                    if (prefix_len == 0 || strncmp(name, prefix, prefix_len) == 0) {
+                        strcpy(matches[match_count], name);
+                        if (type == 4) {
+                            strcat(matches[match_count], "/");
+                        }
+                        match_count++;
+                    }
+                }
+                
+                offset += 24 + name_len;
+            }
+        }
+        
+        p9_clunk(fid);
+        
+        if (match_count == 1) {
+            // Complete it
+            buffer[path_start] = '\0';
+            if (last_slash) {
+                strcat(buffer, dir_path);
+            }
+            strcat(buffer, matches[0]);
+            return strlen(buffer);
+        } else if (match_count > 1) {
+            console_putc('\n');
+            for (int i = 0; i < match_count; i++) {
+                console_write(matches[i]);
+                console_write("  ");
+            }
+            console_putc('\n');
+        }
+    }
+    
+    return current_len;
+}
+
 static int getline_block(char *buffer, int max)
 {
     int len = 0;
@@ -158,10 +252,11 @@ static int getline_block(char *buffer, int max)
             
             // Check if buffer has spaces (command vs path completion)
             int has_space = 0;
+            int last_space = -1;
             for (int i = 0; i < len; i++) {
                 if (buffer[i] == ' ') {
                     has_space = 1;
-                    break;
+                    last_space = i;
                 }
             }
             
@@ -169,8 +264,18 @@ static int getline_block(char *buffer, int max)
                 // Command completion
                 len = complete_command(buffer, len);
                 redraw_prompt_with_buffer(buffer);
+            } else if (has_space) {
+                // Path completion - find start of path argument
+                int path_start = last_space + 1;
+                while (path_start < len && buffer[path_start] == ' ') {
+                    path_start++;
+                }
+                
+                if (path_start < len) {
+                    len = complete_path(buffer, len, path_start);
+                    redraw_prompt_with_buffer(buffer);
+                }
             }
-            // File completion would go here in else if (has_space) block
         }
         else if (ch >= 32 && ch < 127)
         {
