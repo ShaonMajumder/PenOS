@@ -10,6 +10,16 @@ static int input_initialized = 0;
 
 // Linux Input Event Codes (simplified)
 #define EV_KEY 0x01
+#define EV_REL 0x02
+
+// Mouse event codes
+#define REL_X 0x00
+#define REL_Y 0x01
+#define BTN_LEFT 0x110
+#define BTN_RIGHT 0x111
+#define BTN_MIDDLE 0x112
+
+// Keyboard event codes
 #define KEY_ESC 1
 #define KEY_1 2
 #define KEY_2 3
@@ -76,6 +86,15 @@ static const char key_map[] = {
     'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', 0, '*', 0, ' '
 };
 
+// Mouse state
+typedef struct {
+    int x;
+    int y;
+    int buttons;  // Bit 0=left, 1=right, 2=middle
+} mouse_state_t;
+
+static mouse_state_t mouse_state = {0, 0, 0};
+
 static virtio_input_event_t events[32]; // Buffer for events
 
 // Poll for input events
@@ -95,6 +114,23 @@ void virtio_input_poll(void) {
                 if (c) {
                     keyboard_push_char(c);
                 }
+            }
+        } else if (evt->type == EV_REL) { // Mouse movement
+            if (evt->code == REL_X) {
+                mouse_state.x += (int32_t)evt->value;
+            } else if (evt->code == REL_Y) {
+                mouse_state.y += (int32_t)evt->value;
+            }
+        } else if (evt->type == EV_KEY) { // Mouse buttons
+            if (evt->code == BTN_LEFT) {
+                if (evt->value) mouse_state.buttons |= 1;
+                else mouse_state.buttons &= ~1;
+            } else if (evt->code == BTN_RIGHT) {
+                if (evt->value) mouse_state.buttons |= 2;
+                else mouse_state.buttons &= ~2;
+            } else if (evt->code == BTN_MIDDLE) {
+                if (evt->value) mouse_state.buttons |= 4;
+                else mouse_state.buttons &= ~4;
             }
         }
         
@@ -134,4 +170,13 @@ int virtio_input_init(void) {
     console_write("VirtIO-Input: Initialized\n");
     input_initialized = 1;
     return 0;
+}
+
+void mouse_get_position(int *x, int *y) {
+    if (x) *x = mouse_state.x;
+    if (y) *y = mouse_state.y;
+}
+
+int mouse_get_buttons(void) {
+    return mouse_state.buttons;
 }

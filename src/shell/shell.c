@@ -301,20 +301,6 @@ static void cmd_help(void)
     console_write("  ticks             Show system tick counter\n");
     console_write("  sysinfo           Show simple system information\n");
     console_write("  ps                List running tasks\n");
-    console_write("  spawn <name>      Start a demo task (counter|spinner)\n");
-    console_write("  kill <pid>        Stop a task by PID\n");
-    console_write("  halt              Exit the shell (CPU will halt)\n");
-    console_write("  shutdown          Try to power off the machine\n");
-#ifdef FS_FS_H
-    console_write("  pwd               Print current working directory\n");
-    console_write("  cd <dir>          Change directory (currently only / supported)\n");
-    console_write("  ls                List files in the in-memory filesystem\n");
-    console_write("  cat <file>        Show contents of a file\n");
-#endif
-    console_putc('\n');
-    console_write("Examples:\n");
-    console_write("  echo hello world\n");
-    console_write("  spawn counter\n");
     console_write("  ps\n");
     console_write("  kill 3\n");
 #ifdef FS_FS_H
@@ -399,19 +385,6 @@ static void cmd_cd(const char *args)
             console_write(")\n");
         }
     }
-}
-
-static void cmd_ls(void)
-{
-    if (p9_list_directory(NULL) != 0) {
-        console_write("Failed to list directory.\n");
-    }
-}
-
-static void cmd_cat(const char *args)
-{
-    while (*args == ' ')
-    {
         ++args;
     }
     if (*args == '\0')
@@ -567,21 +540,6 @@ void shell_run(void)
         else if (!strncmp(input, "cd ", 3))
         {
             cmd_cd(input + 3);
-        }
-        else if (!strcmp(input, "cd"))
-        {
-            cmd_cd("");
-        }
-        else if (!strcmp(input, "ls"))
-        {
-            cmd_ls();
-        }
-        else if (!strncmp(input, "cat ", 4))
-        {
-            cmd_cat(input + 4);
-#endif
-        }
-        else if (!strcmp(input, "halt"))
         {
             break;
         }

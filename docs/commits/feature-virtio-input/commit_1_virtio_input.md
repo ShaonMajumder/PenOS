@@ -80,7 +80,32 @@ This commit introduces support for the **VirtIO Input** standard, allowing PenOS
 
 ---
 
-## Testing Performed
+## Limitations and Unimplemented Features
+
+### Current Implementation Limitations
+- **Polling-based**: Input is polled in the shell's idle loop rather than being fully interrupt-driven
+- **Keyboard Only**: VirtIO-Mouse is not yet implemented
+- **Basic Key Mapping**: Only common ASCII keys are mapped; function keys, media keys not supported
+
+### Related Unimplemented Drivers
+
+**Storage & Filesystem:**
+- ❌ **ATA/IDE** - Legacy hard disk and CD-ROM controllers
+- ❌ **AHCI/SATA** - Modern disk controllers for physical drives
+- ❌ **VirtIO-Block** - Paravirtualized block storage
+- ❌ **ext2/ext4/FAT** - Native filesystem drivers (currently rely on 9P)
+- ❌ **Disk Partitioning** - MBR/GPT partition table parsing
+- ❌ **File Writing** - 9P filesystem is currently read-only
+
+**Other VirtIO Devices:**
+- ❌ **VirtIO-Net** - Network card
+- ❌ **VirtIO-GPU** - Graphics acceleration
+- ❌ **VirtIO-Console** - Serial console
+- ❌ **VirtIO-Mouse** - Mouse input (PS/2 mouse exists but not integrated)
+
+---
+
+## Architecture Update
 
 ### Manual Verification
 - ✅ Boot PenOS in QEMU with new flags

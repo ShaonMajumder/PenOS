@@ -41,7 +41,8 @@ run: all
 	qemu-system-i386 -cdrom PenOS.iso \
 		-device virtio-9p-pci,disable-modern=on,fsdev=wsl,mount_tag=wsl \
 		-fsdev local,id=wsl,path=/,security_model=none \
-		-device virtio-keyboard-pci,disable-modern=on
+		-device virtio-keyboard-pci,disable-modern=on \
+		-device virtio-mouse-pci,disable-modern=on
 
 clean:
 	rm -rf $(BUILD) PenOS.iso

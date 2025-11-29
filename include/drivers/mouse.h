@@ -9,6 +9,7 @@ typedef struct {
 } mouse_state_t;
 
 void mouse_init(void);
-void mouse_get_state(mouse_state_t *out);
+void mouse_get_position(int *x, int *y);
+int mouse_get_buttons(void);
 
 #endif
