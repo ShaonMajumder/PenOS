@@ -14,12 +14,22 @@ static hba_mem_t *abar = NULL;
 static hba_port_t *ports[32];
 static int port_count = 0;
 
+// Port status tracking for hot-plug
+static int port_status[32] = {0};      // 0=Disconnected, 1=Connected
+static int port_initialized[32] = {0}; // 0=Not Initialized, 1=Initialized
+
 // Virtual addresses for port structures (needed by driver)
 static struct {
     uint32_t clb;
     uint32_t fb;
     uint32_t ctba[32];
 } port_virt[32];
+
+// Forward declarations
+static int check_type(hba_port_t *port);
+static void stop_cmd(hba_port_t *port);
+static void start_cmd(hba_port_t *port);
+static int ahci_port_rebase(hba_port_t *port, int portno);
 
 // Interrupt Handler
 static void ahci_handler(interrupt_frame_t *frame) {
@@ -42,6 +52,34 @@ static void ahci_handler(interrupt_frame_t *frame) {
             
             // Clear port interrupts
             port->is = pis;
+            
+            // Check for Hot-Plug Events
+            if (pis & (AHCI_PORT_IS_PCS | AHCI_PORT_IS_PRCS)) {
+                // Port Connect Status Change or PhyRdy Change
+                if (check_type(port) == 1) { // SATA Drive Present
+                    if (port_status[i] == 0) {
+                        console_write("AHCI: Hot-plug add detected on port ");
+                        console_write_dec(i);
+                        console_write("\n");
+                        
+                        // Initialize the new drive
+                        ahci_port_rebase(port, i);
+                        port_status[i] = 1;
+                        port_initialized[i] = 1;
+                        ports[i] = port; // Ensure port pointer is set
+                    }
+                } else { // Drive Removed
+                    if (port_status[i] == 1) {
+                        console_write("AHCI: Hot-plug remove detected on port ");
+                        console_write_dec(i);
+                        console_write("\n");
+                        
+                        stop_cmd(port);
+                        port_status[i] = 0;
+                        // We keep initialized=1 because memory is still allocated
+                    }
+                }
+            }
             
             // In a real driver, we'd wake up waiting threads here
         }
@@ -117,7 +155,14 @@ static int ahci_port_rebase(hba_port_t *port, int portno) {
     }
     
     // Enable Port Interrupts
-    port->ie = 0xFFFFFFFF;
+    // Enable DHR, PS, DS, SDB, UF, DP (normal operation)
+    // Enable PC, PRC (hot-plug detection)
+    // Enable TFES, HBFS, IFS, INFS, OFS (errors)
+    port->ie = AHCI_PORT_IE_DHRE | AHCI_PORT_IE_PSE | AHCI_PORT_IE_DSE | 
+               AHCI_PORT_IE_SDBE | AHCI_PORT_IE_UFE | AHCI_PORT_IE_DPE |
+               AHCI_PORT_IE_PCE  | AHCI_PORT_IE_PRCE | 
+               AHCI_PORT_IE_TFEE | AHCI_PORT_IE_HBFE | AHCI_PORT_IE_IFE | 
+               AHCI_PORT_IE_INFE | AHCI_PORT_IE_OFE;
     
     start_cmd(port);
     
@@ -176,8 +221,22 @@ int ahci_init(void) {
                 console_write_dec(i);
                 console_write("\n");
                 
-                ports[port_count++] = &abar->ports[i];
+                ports[i] = &abar->ports[i]; // Store in direct index
                 ahci_port_rebase(&abar->ports[i], i);
+                
+                port_status[i] = 1;
+                port_initialized[i] = 1;
+                port_count++; // Keep track of total count
+            } else {
+                // Even if not connected, we should enable interrupts for hot-plug
+                // But we need to be careful not to enable a port that isn't implemented
+                // For now, we only enable interrupts on implemented ports (pi bit set)
+                
+                // Clear any pending interrupts
+                abar->ports[i].is = (uint32_t)-1;
+                
+                // Enable hot-plug interrupts for empty ports
+                abar->ports[i].ie = AHCI_PORT_IE_PCE | AHCI_PORT_IE_PRCE;
             }
         }
         pi >>= 1;
@@ -242,7 +301,7 @@ int ahci_identify(int port, uint16_t *buffer) {
     
     while (1) {
         if ((hba_port->ci & (1 << slot)) == 0) break;
-        if (hba_port->is & AHCI_PxIS_TFES) {
+        if (hba_port->is & AHCI_PORT_IS_TFES) {
             console_write("AHCI: Identify disk error\n");
             return -1;
         }
@@ -302,7 +361,7 @@ int ahci_read(int port, uint64_t lba, uint16_t count, void *buffer) {
     
     while (1) {
         if ((hba_port->ci & (1 << slot)) == 0) break;
-        if (hba_port->is & AHCI_PxIS_TFES) {
+        if (hba_port->is & AHCI_PORT_IS_TFES) {
             console_write("AHCI: Read error\n");
             return -1;
         }
@@ -362,7 +421,7 @@ int ahci_write(int port, uint64_t lba, uint16_t count, const void *buffer) {
     
     while (1) {
         if ((hba_port->ci & (1 << slot)) == 0) break;
-        if (hba_port->is & AHCI_PxIS_TFES) {
+        if (hba_port->is & AHCI_PORT_IS_TFES) {
             console_write("AHCI: Write error\n");
             return -1;
         }
@@ -403,4 +462,46 @@ int ahci_get_block_device(int port, block_device_t *dev) {
     dev->driver_data = (void*)port;
     
     return 0;
+}
+
+// Check if a port is connected
+int ahci_port_is_connected(int port_num) {
+    if (port_num < 0 || port_num >= 32) return 0;
+    return port_status[port_num];
+}
+
+// Scan all ports (can be called manually)
+void ahci_scan_ports(void) {
+    if (!abar) return;
+    
+    console_write("AHCI: Scanning ports...\n");
+    uint32_t pi = abar->pi;
+    for (int i = 0; i < 32; i++) {
+        if (pi & 1) {
+            int type = check_type(&abar->ports[i]);
+            if (type == 1) { // SATA
+                if (port_status[i] == 0) {
+                    console_write("AHCI: Found new drive at port ");
+                    console_write_dec(i);
+                    console_write("\n");
+                    
+                    ports[i] = &abar->ports[i];
+                    ahci_port_rebase(&abar->ports[i], i);
+                    port_status[i] = 1;
+                    port_initialized[i] = 1;
+                }
+            } else {
+                if (port_status[i] == 1) {
+                    console_write("AHCI: Drive removed at port ");
+                    console_write_dec(i);
+                    console_write("\n");
+                    
+                    stop_cmd(&abar->ports[i]);
+                    port_status[i] = 0;
+                }
+            }
+        }
+        pi >>= 1;
+    }
+    console_write("AHCI: Scan complete\n");
 }

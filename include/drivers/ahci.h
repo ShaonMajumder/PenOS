@@ -54,7 +54,68 @@ typedef enum {
 #define ATA_SR_ERR               0x01
 
 // Port Interrupt Status Bit
-#define AHCI_PxIS_TFES           (1 << 30) // Task File Error Status
+#define AHCI_PORT_IS_TFES        (1 << 30) // Task File Error Status
+
+// Capability flags
+#define AHCI_CAP_S64A       (1 << 31)  // Supports 64-bit Addressing
+#define AHCI_CAP_SNCQ       (1 << 30)  // Supports Native Command Queuing
+#define AHCI_CAP_SSNTF      (1 << 29)  // Supports SNotification Register
+#define AHCI_CAP_SMPS       (1 << 28)  // Supports Mechanical Presence Switch
+#define AHCI_CAP_SSS        (1 << 27)  // Supports Staggered Spin-up
+#define AHCI_CAP_SALP       (1 << 26)  // Supports Aggressive Link Power Management
+#define AHCI_CAP_SAL        (1 << 25)  // Supports Activity LED
+#define AHCI_CAP_SCLO       (1 << 24)  // Supports Command List Override
+#define AHCI_CAP_SXS        (1 << 5)   // Supports External SATA
+#define AHCI_CAP_SAM        (1 << 18)  // Supports AHCI mode only
+
+// Global HBA Control flags
+#define AHCI_GHC_AE         (1 << 31)  // AHCI Enable
+#define AHCI_GHC_IE         (1 << 1)   // Interrupt Enable
+#define AHCI_GHC_HR         (1 << 0)   // HBA Reset
+
+// Port Command flags
+#define AHCI_CMD_ST         (1 << 0)   // Start
+#define AHCI_CMD_SUD        (1 << 1)   // Spin-Up Device
+#define AHCI_CMD_POD        (1 << 2)   // Power On Device
+#define AHCI_CMD_FRE        (1 << 4)   // FIS Receive Enable
+#define AHCI_CMD_FR         (1 << 14)  // FIS Receive Running
+#define AHCI_CMD_CR         (1 << 15)  // Command List Running
+
+// Port Interrupt Status/Enable flags
+#define AHCI_PORT_IS_DHRS   (1 << 0)   // Device to Host Register FIS Interrupt
+#define AHCI_PORT_IS_PSS    (1 << 1)   // PIO Setup FIS Interrupt
+#define AHCI_PORT_IS_DSS    (1 << 2)   // DMA Setup FIS Interrupt
+#define AHCI_PORT_IS_SDBS   (1 << 3)   // Set Device Bits Interrupt
+#define AHCI_PORT_IS_UFS    (1 << 4)   // Unknown FIS Interrupt
+#define AHCI_PORT_IS_DPS    (1 << 5)   // Descriptor Processed
+#define AHCI_PORT_IS_PCS    (1 << 6)   // Port Connect Change Status
+#define AHCI_PORT_IS_DMPS   (1 << 7)   // Device Mechanical Presence Status
+#define AHCI_PORT_IS_PRCS   (1 << 22)  // PhyRdy Change Status
+#define AHCI_PORT_IS_IPMS   (1 << 23)  // Incorrect Port Multiplier Status
+#define AHCI_PORT_IS_OFS    (1 << 24)  // Overflow Status
+#define AHCI_PORT_IS_INFS   (1 << 26)  // Interface Non-fatal Error Status
+#define AHCI_PORT_IS_IFS    (1 << 27)  // Interface Fatal Error Status
+#define AHCI_PORT_IS_HBDS   (1 << 28)  // Host Bus Data Error Status
+#define AHCI_PORT_IS_HBFS   (1 << 29)  // Host Bus Fatal Error Status
+#define AHCI_PORT_IS_TFES   (1 << 30)  // Task File Error Status
+
+// Port Interrupt Enable bits (same as IS bits)
+#define AHCI_PORT_IE_DHRE   AHCI_PORT_IS_DHRS
+#define AHCI_PORT_IE_PSE    AHCI_PORT_IS_PSS
+#define AHCI_PORT_IE_DSE    AHCI_PORT_IS_DSS
+#define AHCI_PORT_IE_SDBE   AHCI_PORT_IS_SDBS
+#define AHCI_PORT_IE_UFE    AHCI_PORT_IS_UFS
+#define AHCI_PORT_IE_DPE    AHCI_PORT_IS_DPS
+#define AHCI_PORT_IE_PCE    AHCI_PORT_IS_PCS   // Port Connect Change Enable
+#define AHCI_PORT_IE_DMPE   AHCI_PORT_IS_DMPS
+#define AHCI_PORT_IE_PRCE   AHCI_PORT_IS_PRCS  // PhyRdy Change Enable
+#define AHCI_PORT_IE_IPME   AHCI_PORT_IS_IPMS
+#define AHCI_PORT_IE_OFE    AHCI_PORT_IS_OFS
+#define AHCI_PORT_IE_INFE   AHCI_PORT_IS_INFS
+#define AHCI_PORT_IE_IFE    AHCI_PORT_IS_IFS
+#define AHCI_PORT_IE_HBDE   AHCI_PORT_IS_HBDS
+#define AHCI_PORT_IE_HBFE   AHCI_PORT_IS_HBFS
+#define AHCI_PORT_IE_TFEE   AHCI_PORT_IS_TFES
 
 // HBA Port Registers
 typedef struct {
@@ -161,5 +222,7 @@ int ahci_identify(int port, uint16_t *buffer);
 int ahci_read(int port, uint64_t lba, uint16_t count, void *buffer);
 int ahci_write(int port, uint64_t lba, uint16_t count, const void *buffer);
 int ahci_get_block_device(int port, block_device_t *dev);
+void ahci_scan_ports(void);
+int ahci_port_is_connected(int port_num);
 
 #endif

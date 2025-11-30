@@ -313,6 +313,10 @@ static void cmd_help(void)
     console_write("  mouse             Display mouse position and button states\n");
     console_write("  cat <file>        Show contents of a file\n");
 #endif
+    console_write("  satastatus        Show SATA port status\n");
+    console_write("  satarescan        Rescan SATA ports\n");
+    console_write("  satastatus        Show SATA port status\n");
+    console_write("  satarescan        Rescan SATA ports\n");
     console_putc('\n');
     console_write("Examples:\n");
     console_write("  echo hello world\n");
@@ -582,6 +586,41 @@ static void cmd_sata(void) {
     
     kfree(write_buf);
     kfree(read_buf);
+    kfree(write_buf);
+    kfree(read_buf);
+}
+
+static void cmd_satastatus(void) {
+    console_write("SATA Port Status:\n");
+    for (int i = 0; i < 32; i++) {
+        if (ahci_port_is_connected(i)) {
+            console_write("Port ");
+            console_write_dec(i);
+            console_write(": CONNECTED\n");
+            
+            // Try to identify the drive to get more info
+            uint16_t *id_buf = (uint16_t*)kmalloc(512);
+            if (ahci_identify(i, id_buf) == 0) {
+                console_write("  Model: ");
+                for (int j = 27; j < 47; j++) {
+                    char c1 = (id_buf[j] >> 8) & 0xFF;
+                    char c2 = id_buf[j] & 0xFF;
+                    console_putc(c2); console_putc(c1);
+                }
+                console_write("\n");
+                
+                uint64_t sectors = *(uint64_t*)&id_buf[100];
+                console_write("  Size: ");
+                console_write_dec((uint32_t)(sectors * 512 / 1024 / 1024));
+                console_write(" MB\n");
+            }
+            kfree(id_buf);
+        }
+    }
+}
+
+static void cmd_satarescan(void) {
+    ahci_scan_ports();
 }
 
 /* ---------- main shell loop ---------- */
@@ -673,6 +712,14 @@ void shell_run(void)
         else if (!strcmp(input, "sata"))
         {
             cmd_sata();
+        }
+        else if (!strcmp(input, "satastatus"))
+        {
+            cmd_satastatus();
+        }
+        else if (!strcmp(input, "satarescan"))
+        {
+            cmd_satarescan();
         }
         else if (!strcmp(input, "shutdown"))
         {
