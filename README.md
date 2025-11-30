@@ -142,7 +142,7 @@ make run        # Boot in QEMU
 - **UI:** [Framebuffer](docs/commits/feature-framebuffer/1_framebuffer-console.md), [GRUB Theme](docs/commits/feature-branding/1_grub_theme.md)
 
 ### Release History
-[v0.8.0](docs/versions/v0.8.0.md) → [v0.7.0](docs/versions/v0.7.0.md) → [v0.6.0](docs/versions/v0.6.0.md) → ... → [v0.1.0](docs/versions/v0.1.0.md)
+[v0.9.0](docs/versions/v0.9.0.md) → [v0.8.0](docs/versions/v0.8.0.md) → [v0.7.0](docs/versions/v0.7.0.md) → [v0.6.0](docs/versions/v0.6.0.md) → ... → [v0.1.0](docs/versions/v0.1.0.md)
 
 ## 🎯 Project Structure
 

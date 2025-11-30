@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.0
+
+- Implemented demand paging with a page fault handler (interrupt 14) that automatically allocates physical memory on-demand for user-mode page faults, enabling lazy memory allocation and laying the foundation for copy-on-write and memory-mapped files.
+- Fixed VirtIO-9P filesystem driver by implementing missing `p9_read()` function and improving `p9_get_file_size()` with proper TGETATTR support.
+- Added ELF loader to build system and fixed various compilation issues in scheduler and shell.
+
 ## v0.8.0
 
 - Added a Multiboot framebuffer module that initializes the 1024x768x32 mode, draws the PenOS splash/logo, exposes pixel/rect/text/sprite helpers, and pipes the shell console into a tinted overlay without losing the VGA fallback.
