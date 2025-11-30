@@ -43,6 +43,7 @@ make run        # Boot in QEMU
 | **Heap** | Freelist allocator | Dynamic allocation, coalescing, trimming |
 | **Page Size** | 4KB | Standard x86 paging |
 | **Demand Paging** | Page Fault Handler | Lazy allocation for user space |
+| **Swap Space** | Disk-backed paging | 16MB swap area, AHCI integration |
 
 ### Drivers & Hardware
 | Driver | Type | Features |
@@ -115,7 +116,7 @@ make run        # Boot in QEMU
 | Area | What you get today | Deep-dive docs | Key sources |
 | --- | --- | --- | --- |
 | **Boot & CPU** | GRUB theme, `boot.s`, GDT/IDT, PIC, PIT @100Hz, TSS for Ring 3 | [`architecture.md`](docs/architecture.md#1-cpu-bring-up), [`bootstrap.md`](docs/commits/feature-core/1_bootstrap.md) | `grub/themes/penos`, `src/boot.s`, `src/arch/x86/` |
-| **Memory** | Bitmap PMM, higher-half paging, recursive mapping, freelist heap, per-process page directories, demand paging | [`architecture.md`](docs/architecture.md#2-memory-management), [`pmm`](docs/commits/feature-pmm/1_bitmap_pmm.md), [`paging`](docs/commits/feature-paging/1_dynamic_vmm.md), [`demand-paging`](docs/commits/feature-paging/2_demand_paging.md), [`heap`](docs/commits/feature-heap/), [`process-isolation`](docs/commits/feature-process-isolation/commit_1_per_process_page_directories.md) | `src/mem/` |
+| **Memory** | Bitmap PMM, higher-half paging, recursive mapping, freelist heap, per-process page directories, demand paging, swap space | [`architecture.md`](docs/architecture.md#2-memory-management), [`pmm`](docs/commits/feature-pmm/1_bitmap_pmm.md), [`paging`](docs/commits/feature-paging/1_dynamic_vmm.md), [`demand-paging`](docs/commits/feature-paging/2_demand_paging.md), [`swap-space`](docs/commits/feature-memory/3_swap_space.md), [`heap`](docs/commits/feature-heap/), [`process-isolation`](docs/commits/feature-process-isolation/commit_1_per_process_page_directories.md) | `src/mem/` |
 | **Scheduler** | Preemptive round-robin, task lifecycle, zombie reaping, per-process address spaces | [`architecture.md`](docs/architecture.md#1-cpu-bring-up), [`scheduler`](docs/commits/feature-scheduler/) | `src/sched/sched.c` |
 | **User Mode** | Ring 3 execution, TSS, syscall library (`exec`, `exit`, `write`, `yield`, `getpid`, `ticks`), process isolation | [`usermode`](docs/commits/feature-usermode/commit_1_usermode.md), [`syscalls`](docs/commits/feature-usermode/commit_2_syscall_interface.md), [`exec`](docs/commits/feature-exec/commit_1_exec_syscall_foundation.md) | `src/arch/x86/tss.c`, `src/sys/syscall.c`, `src/lib/syscall.c` |
 | **ELF Loader** | ELF32 parser, segment loading, memory mapping, binary execution | [`elf-loader`](docs/commits/feature-exec/commit_1_exec_syscall_foundation.md) | `src/fs/elf.c`, `include/fs/elf.h` |
@@ -133,7 +134,7 @@ make run        # Boot in QEMU
 
 ### Feature Documentation
 - **Core:** [Bootstrap](docs/commits/feature-core/1_bootstrap.md)
-- **Memory:** [PMM](docs/commits/feature-pmm/1_bitmap_pmm.md), [Paging](docs/commits/feature-paging/1_dynamic_vmm.md), [Demand Paging](docs/commits/feature-paging/2_demand_paging.md), [Heap](docs/commits/feature-heap/)
+- **Memory:** [PMM](docs/commits/feature-pmm/1_bitmap_pmm.md), [Paging](docs/commits/feature-paging/1_dynamic_vmm.md), [Demand Paging](docs/commits/feature-paging/2_demand_paging.md), [Swap Space](docs/commits/feature-memory/3_swap_space.md), [Heap](docs/commits/feature-heap/)
 - **Scheduler:** [Preemptive RR](docs/commits/feature-scheduler/1_preemptive_rr.md), [Task Lifecycle](docs/commits/feature-scheduler/2_task_lifecycle.md)
 - **User Mode:** [Ring 3 Support](docs/commits/feature-usermode/commit_1_usermode.md), [Syscall Interface](docs/commits/feature-usermode/commit_2_syscall_interface.md), [Exec & ELF](docs/commits/feature-exec/commit_1_exec_syscall_foundation.md)
 - **Filesystem:** [VirtIO-9P](docs/commits/feature-virtio-9p-filesystem/feature-virtio-9p-filesystem.md), [Tab Completion](docs/commits/feature-virtio-9p-filesystem/commit_2_tab-completion.md)
