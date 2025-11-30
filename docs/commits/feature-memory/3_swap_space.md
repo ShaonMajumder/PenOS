@@ -94,12 +94,13 @@ Added `swap.o` to build system.
 
 When a page is swapped out:
 - **Bit 0 (Present)**: 0 (not in memory)
+- **Bit 9 (PAGE_SWAPPED)**: 1 (indicates page is swapped out)
 - **Bits 12-31**: Swap slot index
 
 This allows distinguishing between:
 - **Unmapped page**: PTE = 0
-- **Swapped page**: PTE != 0 && !(PTE & 0x1)
-- **Present page**: PTE & 0x1
+- **Swapped page**: PTE & PAGE_SWAPPED (0x200)
+- **Present page**: PTE & PAGE_PRESENT (0x1)
 
 ### Swap Workflow
 
@@ -107,13 +108,13 @@ This allows distinguishing between:
 1. Page is currently mapped and present
 2. `paging_swap_out(virt_addr)` is called
 3. Page data is written to disk at swap slot
-4. PTE is updated to store swap slot index
+4. PTE is updated: `(swap_slot << 12) | PAGE_SWAPPED`
 5. Physical frame is freed back to PMM
 6. TLB entry is invalidated
 
 **Swap In (Page Fault):**
 1. Page fault occurs on non-present page
-2. Handler checks if PTE contains swap slot
+2. Handler checks if PTE has `PAGE_SWAPPED` bit set
 3. New physical frame is allocated
 4. Page is mapped to new frame
 5. Data is read from swap slot into page
