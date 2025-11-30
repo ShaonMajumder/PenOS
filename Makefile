@@ -45,6 +45,7 @@ $(BUILD)/kernel.bin: $(OBJS)
 		$(BUILD)/drivers/virtio_input.o \
 		$(BUILD)/drivers/ahci.o \
 		$(BUILD)/fs/9p.o \
+		$(BUILD)/fs/elf.o \
 		$(BUILD)/fs/fs.o \
 		$(BUILD)/fs/penfs.o \
 		$(BUILD)/kernel.o \
