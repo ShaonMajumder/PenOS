@@ -11,6 +11,7 @@
 #include "fs/9p.h"
 #include "drivers/virtio.h"
 #include "drivers/mouse.h"
+#include "lib/syscall.h"
 
 typedef struct
 {
@@ -624,22 +625,40 @@ static void cmd_satarescan(void) {
 }
 
 static void user_mode_test_task(void) {
-    // String on stack to ensure it's in user-accessible memory
-    char msg[] = "[User] Hello from Ring 3!\n";
+    // ALL strings must be on stack to be in user-accessible memory
+    char msg1[] = "[User] Hello from Ring 3! PID=";
+    char msg2[] = "[User] Yielding...\n";
+    char msg3[] = "[User] Back from yield. Exiting...\n";
     
-    while (1) {
-        // Syscall 0 (write)
-        // EAX = 0, EBX = string pointer
-        __asm__ volatile (
-            "mov $0, %%eax\n"
-            "mov %0, %%ebx\n"
-            "int $0x80\n"
-            : : "r"(msg) : "eax", "ebx"
-        );
-        
-        // Delay
-        for (volatile int i = 0; i < 10000000; i++);
+    write(msg1);
+    
+    // Print PID using a simple conversion
+    uint32_t pid = getpid();
+    char pid_str[16];
+    int i = 0;
+    if (pid == 0) {
+        pid_str[i++] = '0';
+    } else {
+        uint32_t temp = pid;
+        while (temp > 0) {
+            temp /= 10;
+            i++;
+        }
+        temp = pid;
+        int len = i;
+        while (temp > 0) {
+            pid_str[--len] = (temp % 10) + '0';
+            temp /= 10;
+        }
     }
+    pid_str[i++] = '\n';
+    pid_str[i] = '\0';
+    write(pid_str);
+    
+    write(msg2);
+    yield();
+    write(msg3);
+    exit();
 }
 
 static void cmd_usermode(void) {

@@ -13,4 +13,11 @@ void paging_map(uint32_t virt, uint32_t phys, uint32_t flags);
 void paging_unmap(uint32_t virt);
 uint32_t paging_virt_to_phys(uint32_t virt);
 
+// Per-process page directory management
+uint32_t paging_create_directory(void);
+uint32_t paging_clone_directory(uint32_t src_pd_phys);
+void paging_switch_directory(uint32_t pd_phys);
+void paging_destroy_directory(uint32_t pd_phys);
+uint32_t paging_get_kernel_directory(void);
+
 #endif

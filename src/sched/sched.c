@@ -24,6 +24,7 @@ typedef struct task_entry {
     void (*entry)(void);
     uint8_t *stack;
     uint32_t kernel_stack; // ESP0 for TSS
+    uint32_t page_directory_phys; // Physical address of page directory
 } task_entry_t;
 
 static task_entry_t tasks[MAX_TASKS];
@@ -61,6 +62,7 @@ void sched_init(void)
     current_task->frame = NULL;
     current_task->entry = NULL;
     current_task->stack = NULL;
+    current_task->page_directory_phys = paging_get_kernel_directory();
     strncpy(current_task->name, "main", sizeof(current_task->name) - 1);
     active_tasks = 1;
     current_index = 0;
@@ -121,35 +123,45 @@ int32_t sched_spawn_user(void (*entry)(void), const char *name)
     int slot = find_free_slot();
     if (slot < 0) return -1;
 
-    // 1. Allocate Kernel Stack (for syscalls/interrupts)
+    // 1. Create new page directory for this process
+    uint32_t new_pd_phys = paging_create_directory();
+    if (!new_pd_phys) return -1;
+
+    // 2. Allocate Kernel Stack (for syscalls/interrupts)
     uint8_t *kstack = (uint8_t *)kmalloc(STACK_SIZE);
-    if (!kstack) return -1;
+    if (!kstack) {
+        paging_destroy_directory(new_pd_phys);
+        return -1;
+    }
     uint32_t kstack_top = ((uint32_t)kstack + STACK_SIZE) & ~0xF;
 
-    // 2. Allocate User Stack
-    // For simplicity, we alloc a page from kernel heap and map it as User
-    // In a real OS, we'd allocate a frame and map it to a fixed user virtual address
+    // 3. Allocate User Stack
     uint8_t *ustack = (uint8_t *)kmalloc(STACK_SIZE);
     if (!ustack) {
         kfree(kstack);
+        paging_destroy_directory(new_pd_phys);
         return -1;
     }
     
+    // 4. Temporarily switch to new page directory to map user memory
+    uint32_t old_pd = paging_get_kernel_directory();
+    paging_switch_directory(new_pd_phys);
+    
     // Remap user stack pages as User-accessible (Ring 3)
-    // Assuming STACK_SIZE is page aligned or small enough. 4096 is 1 page.
     uint32_t ustack_phys = paging_virt_to_phys((uint32_t)ustack);
     if (ustack_phys) {
         paging_map((uint32_t)ustack, ustack_phys, PAGE_PRESENT | PAGE_RW | PAGE_USER);
     }
     
-    // Also map the entry point code as User-accessible if it's in kernel space
-    // NOTE: This is a hack for the demo. Normally user code is loaded separately.
-    // We assume the code is in the identity mapped region.
+    // Also map the entry point code as User-accessible
     uint32_t entry_phys = paging_virt_to_phys((uint32_t)entry);
     if (entry_phys) {
         // Map the page containing the entry point
         paging_map((uint32_t)entry & 0xFFFFF000, entry_phys & 0xFFFFF000, PAGE_PRESENT | PAGE_RW | PAGE_USER);
     }
+    
+    // Switch back to kernel page directory
+    paging_switch_directory(old_pd);
 
     uint32_t ustack_top = ((uint32_t)ustack + STACK_SIZE) & ~0xF;
 
@@ -161,9 +173,9 @@ int32_t sched_spawn_user(void (*entry)(void), const char *name)
     strncpy(task->name, name, sizeof(task->name) - 1);
     task->stack = kstack; // We track kernel stack for cleanup
     task->kernel_stack = kstack_top; // ESP0
+    task->page_directory_phys = new_pd_phys; // Store page directory
 
     // Set up interrupt frame on KERNEL stack
-    // When we IRET, we will pop: EIP, CS, EFLAGS, ESP, SS (since changing privilege)
     interrupt_frame_t *frame = (interrupt_frame_t *)(kstack_top - sizeof(interrupt_frame_t));
     memset(frame, 0, sizeof(*frame));
 
@@ -228,6 +240,36 @@ int sched_kill(uint32_t id)
     return 0;
 }
 
+void sched_yield(void)
+{
+    // Trigger a schedule by calling the interrupt handler?
+    // Or just wait for the next timer tick?
+    // Ideally we want to give up the rest of our timeslice.
+    // We can force a task switch if we were in kernel mode, but we are likely called from syscall handler.
+    // The syscall handler returns to `isr_common_stub` which does `iret`.
+    // If we want to switch, we need to call `sched_tick` manually?
+    // But `sched_tick` expects an interrupt frame.
+    
+    // For now, a simple yield implementation is to just wait for the next tick.
+    // But that's not really yielding.
+    // A better way is to set a flag "yield_requested" and check it in the timer handler?
+    // Or, since we are in a syscall (interrupt), we can just call the scheduler?
+    // But `sched_tick` takes `frame` from the stack.
+    
+    // Let's just use `__asm__ volatile ("int $0x20")` to force a timer interrupt?
+    // Or better, just wait.
+    // Actually, for this simple OS, `hlt` until next interrupt is fine for now.
+    __asm__ volatile ("hlt");
+}
+
+uint32_t sched_get_current_pid(void)
+{
+    if (current_task) {
+        return current_task->id;
+    }
+    return 0;
+}
+
 /*
  * Main scheduler entry point called from the timer interrupt.
  * It returns the interrupt_frame_t* that the CPU should resume with.
@@ -283,6 +325,11 @@ interrupt_frame_t *sched_tick(interrupt_frame_t *frame)
 
     // Update TSS ESP0 for the new task
     tss_set_stack(current_task->kernel_stack);
+
+    // Switch to the new task's page directory
+    if (current_task->page_directory_phys) {
+        paging_switch_directory(current_task->page_directory_phys);
+    }
 
     if (!current_task->frame) {
         current_task->frame = frame;
@@ -357,6 +404,11 @@ static void destroy_task(task_entry_t *task)
     if (task->stack) {
         kfree(task->stack);
         task->stack = NULL;
+    }
+    // Free page directory if it's not the kernel directory
+    if (task->page_directory_phys && task->page_directory_phys != paging_get_kernel_directory()) {
+        paging_destroy_directory(task->page_directory_phys);
+        task->page_directory_phys = 0;
     }
     memset(task->name, 0, sizeof(task->name));
     task->state = TASK_UNUSED;

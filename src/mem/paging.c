@@ -112,7 +112,9 @@ static void map_identity_region(uint32_t length)
     uint32_t pages = align_up(length, PAGE_SIZE) / PAGE_SIZE;
     for (uint32_t i = 0; i < pages; ++i) {
         uint32_t phys = i * PAGE_SIZE;
-        paging_map(phys, phys, PAGE_RW);
+        // Map as User-accessible for demo purposes (allows Ring 3 to execute kernel code)
+        // In a real OS, this would be a security issue
+        paging_map(phys, phys, PAGE_RW | PAGE_USER);
     }
 }
 
@@ -140,4 +142,125 @@ void paging_init(void)
 
     load_page_directory(current_pd_phys);
     console_write("Paging enabled. Kernel mapped at higher half.\n");
+}
+
+// Get kernel page directory physical address
+uint32_t paging_get_kernel_directory(void)
+{
+    return current_pd_phys;
+}
+
+// Create a new page directory for a process
+uint32_t paging_create_directory(void)
+{
+    // Allocate new page directory
+    uint32_t new_pd_phys = alloc_frame_zero();
+    uint32_t *new_pd = phys_to_ptr(new_pd_phys);
+    
+    // Copy kernel mappings (upper half: 0xC0000000+)
+    // Kernel occupies page directory entries 768-1023 (0xC0000000 - 0xFFFFFFFF)
+    for (uint32_t i = 768; i < 1024; i++) {
+        new_pd[i] = current_pd[i];
+    }
+    
+    // Set up recursive mapping for new directory
+    new_pd[1023] = new_pd_phys | PAGE_PRESENT | PAGE_RW;
+    
+    return new_pd_phys;
+}
+
+// Clone a page directory (for fork)
+uint32_t paging_clone_directory(uint32_t src_pd_phys)
+{
+    uint32_t *src_pd = phys_to_ptr(src_pd_phys);
+    uint32_t new_pd_phys = alloc_frame_zero();
+    uint32_t *new_pd = phys_to_ptr(new_pd_phys);
+    
+    // Copy all entries
+    for (uint32_t i = 0; i < 1024; i++) {
+        if (i >= 768) {
+            // Kernel space: share page tables
+            new_pd[i] = src_pd[i];
+        } else {
+            // User space: clone page tables
+            if (src_pd[i] & PAGE_PRESENT) {
+                uint32_t src_pt_phys = src_pd[i] & ~0xFFF;
+                uint32_t *src_pt = phys_to_ptr(src_pt_phys);
+                
+                // Allocate new page table
+                uint32_t new_pt_phys = alloc_frame_zero();
+                uint32_t *new_pt = phys_to_ptr(new_pt_phys);
+                
+                // Copy page table entries
+                for (uint32_t j = 0; j < 1024; j++) {
+                    if (src_pt[j] & PAGE_PRESENT) {
+                        // Allocate new physical page
+                        uint32_t new_page_phys = alloc_frame_zero();
+                        
+                        // Copy page content
+                        uint32_t src_page_phys = src_pt[j] & ~0xFFF;
+                        memcpy(phys_to_ptr(new_page_phys), phys_to_ptr(src_page_phys), PAGE_SIZE);
+                        
+                        // Set up new page table entry with same flags
+                        new_pt[j] = new_page_phys | (src_pt[j] & 0xFFF);
+                    }
+                }
+                
+                // Set up new page directory entry with same flags
+                new_pd[i] = new_pt_phys | (src_pd[i] & 0xFFF);
+            }
+        }
+    }
+    
+    // Set up recursive mapping
+    new_pd[1023] = new_pd_phys | PAGE_PRESENT | PAGE_RW;
+    
+    return new_pd_phys;
+}
+
+// Switch to a different page directory
+void paging_switch_directory(uint32_t pd_phys)
+{
+    if (pd_phys == current_pd_phys) {
+        return; // Already using this directory
+    }
+    
+    current_pd_phys = pd_phys;
+    current_pd = phys_to_ptr(pd_phys);
+    
+    // Load CR3 with new page directory
+    __asm__ volatile ("mov %0, %%cr3" :: "r"(pd_phys) : "memory");
+}
+
+// Destroy a page directory and free its memory
+void paging_destroy_directory(uint32_t pd_phys)
+{
+    if (pd_phys == current_pd_phys) {
+        console_write("[Paging] Cannot destroy current page directory\n");
+        return;
+    }
+    
+    uint32_t *pd = phys_to_ptr(pd_phys);
+    
+    // Free user space page tables and pages
+    for (uint32_t i = 0; i < 768; i++) {
+        if (pd[i] & PAGE_PRESENT) {
+            uint32_t pt_phys = pd[i] & ~0xFFF;
+            uint32_t *pt = phys_to_ptr(pt_phys);
+            
+            // Free all pages in this page table
+            for (uint32_t j = 0; j < 1024; j++) {
+                if (pt[j] & PAGE_PRESENT) {
+                    uint32_t page_phys = pt[j] & ~0xFFF;
+                    pmm_free_frame(page_phys);
+                }
+            }
+            
+            // Free the page table itself
+            pmm_free_frame(pt_phys);
+        }
+    }
+    
+    // Free the page directory
+    pmm_free_frame(pd_phys);
 }

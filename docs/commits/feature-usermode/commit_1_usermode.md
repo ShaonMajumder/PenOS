@@ -25,6 +25,7 @@ This commit introduces the infrastructure required to execute code in User Mode 
 
 ### 3. Memory Management (`src/mem/paging.c`)
 - **Page Directory**: Updated `get_page_table` to propagate the `PAGE_USER` flag to the Page Directory Entry (PDE). This ensures that if a page is mapped as User-accessible, the containing 4MB region also allows User access, preventing Page Faults (0x7) when accessing User pages in Kernel regions (like the heap).
+- **Identity Mapping**: Updated `map_identity_region` to include `PAGE_USER` flag. This allows user mode tasks to execute kernel code for demo purposes. **Note**: In a production OS, this would be a security vulnerability.
 
 ### 4. Shell Integration (`src/shell/shell.c`)
 - **`usermode` command**: Spawns a test task that executes in Ring 3.
@@ -44,3 +45,4 @@ This commit introduces the infrastructure required to execute code in User Mode 
 ## Limitations
 - **Memory Protection**: User stack is allocated from kernel heap and remapped. Proper process isolation and virtual memory management are future work.
 - **Binary Loading**: Currently only supports spawning internal functions as user tasks. ELF loading is not yet implemented.
+- **Security**: The identity-mapped region (first 16MB) is mapped as user-accessible to allow demo user tasks to execute kernel code. This is acceptable for a demo OS but would be a critical security flaw in production.

@@ -49,6 +49,7 @@ $(BUILD)/kernel.bin: $(OBJS)
 		$(BUILD)/fs/penfs.o \
 		$(BUILD)/kernel.o \
 		$(BUILD)/lib/string.o \
+		$(BUILD)/lib/syscall.o \
 		$(BUILD)/mem/heap.o \
 		$(BUILD)/mem/paging.o \
 		$(BUILD)/mem/pmm.o \

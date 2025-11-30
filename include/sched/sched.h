@@ -23,6 +23,8 @@ void sched_init(void);
 int32_t sched_spawn_named(const char *name);
 int32_t sched_spawn_user(void (*entry)(void), const char *name);
 int sched_kill(uint32_t id);
+void sched_yield(void);
+uint32_t sched_get_current_pid(void);
 interrupt_frame_t *sched_tick(interrupt_frame_t *frame);
 uint32_t sched_task_count(void);
 void sched_for_each(sched_iter_cb cb);
