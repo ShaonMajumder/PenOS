@@ -38,6 +38,7 @@ $(BUILD)/kernel.bin: $(OBJS)
 		$(BUILD)/drivers/keyboard.o \
 		$(BUILD)/drivers/mouse.o \
 		$(BUILD)/drivers/pci.o \
+		$(BUILD)/drivers/speaker.o \
 		$(BUILD)/drivers/virtio.o \
 		$(BUILD)/drivers/virtio_console.o \
 		$(BUILD)/drivers/virtio_input.o \
@@ -80,10 +81,29 @@ run: all disk.img
 		-device ahci,id=ahci \
 		-device ide-hd,drive=ahci-disk,bus=ahci.0
 
+run-windows: all disk.img
+	@echo "Running PenOS in Windows QEMU with audio support..."
+	@echo "Make sure QEMU for Windows is installed!"
+	@echo "Download from: https://qemu.weilnetz.de/w64/"
+	cmd.exe /c "C:\Program Files\qemu\qemu-system-i386.exe" \
+		-cdrom PenOS.iso \
+		-device virtio-9p-pci,disable-modern=on,fsdev=wsl,mount_tag=wsl \
+		-fsdev local,id=wsl,path=\\\\wsl$$\\Ubuntu\\,security_model=none \
+		-device virtio-keyboard-pci,disable-modern=on \
+		-device virtio-mouse-pci,disable-modern=on \
+		-device virtio-serial-pci,disable-modern=on \
+		-chardev stdio,id=cons0,mux=on \
+		-device virtconsole,chardev=cons0 \
+		-drive id=ahci-disk,file=disk.img,if=none,format=raw \
+		-device ahci,id=ahci \
+		-device ide-hd,drive=ahci-disk,bus=ahci.0 \
+		-audiodev dsound,id=snd0 \
+		-machine pcspk-audiodev=snd0
+
 disk.img:
 	dd if=/dev/zero of=disk.img bs=1M count=128
 
 clean:
 	rm -rf $(BUILD) PenOS.iso
 
-.PHONY: all iso run clean
+.PHONY: all iso run run-windows clean

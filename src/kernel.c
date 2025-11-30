@@ -12,6 +12,7 @@
 #include "drivers/virtio.h"
 #include "drivers/virtio_console.h"
 #include "drivers/ahci.h"
+#include "drivers/speaker.h"
 #include "mem/pmm.h"
 #include "mem/paging.h"
 #include "mem/heap.h"
@@ -58,6 +59,12 @@ void kernel_main(uint32_t magic, multiboot_info_t *mb_info)
     paging_init();
     heap_init();
     
+    // Initialize PC speaker and play startup sound
+    speaker_init();
+    console_write("[Speaker] Playing startup melody (C-E-G)...\n");
+    speaker_startup_sound();
+    console_write("[Speaker] Startup sound complete!\n");
+    
     // Initialize drivers
     keyboard_init();
     mouse_init();
@@ -74,16 +81,17 @@ void kernel_main(uint32_t magic, multiboot_info_t *mb_info)
     syscall_init();
     sched_init();
     
+
     // Initialize filesystem
     fs_init();
 
     console_write("Initialization complete. Enabling interrupts...\n");
-    __asm__ volatile ("sti");
+    __asm__ volatile("sti");
 
     shell_run();
 
     console_write("Shell exited. Halting.\n");
     for (;;) {
-        __asm__ volatile ("hlt");
+        __asm__ volatile("hlt");
     }
 }
