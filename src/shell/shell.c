@@ -522,6 +522,68 @@ static void cmd_kill(const char *args)
     }
 }
 
+#include <drivers/ahci.h>
+#include <mem/heap.h>
+
+static void cmd_sata(void) {
+    console_write("Testing SATA Disk I/O...\n");
+    
+    // 1. Identify
+    uint16_t *id_buf = (uint16_t*)kmalloc(512);
+    if (ahci_identify(0, id_buf) == 0) {
+        console_write("Identify: Success\n");
+        // Print model (words 27-46)
+        console_write("Model: ");
+        for (int i = 27; i < 47; i++) {
+            char c1 = (id_buf[i] >> 8) & 0xFF;
+            char c2 = id_buf[i] & 0xFF;
+            console_putc(c2); console_putc(c1);
+        }
+        console_write("\n");
+        
+        // Print capacity (LBA48 words 100-103)
+        uint64_t sectors = *(uint64_t*)&id_buf[100];
+        console_write("Sectors: ");
+        console_write_dec((uint32_t)sectors); // Truncated for print
+        console_write("\n");
+    } else {
+        console_write("Identify: Failed\n");
+    }
+    kfree(id_buf);
+    
+    // 2. Write Test
+    console_write("Writing to sector 0...\n");
+    char *write_buf = (char*)kmalloc(512);
+    strcpy(write_buf, "Hello, SATA World! This is a test sector.");
+    if (ahci_write(0, 0, 1, write_buf) == 0) {
+        console_write("Write: Success\n");
+    } else {
+        console_write("Write: Failed\n");
+    }
+    
+    // 3. Read Test
+    console_write("Reading from sector 0...\n");
+    char *read_buf = (char*)kmalloc(512);
+    memset(read_buf, 0, 512);
+    if (ahci_read(0, 0, 1, read_buf) == 0) {
+        console_write("Read: Success\n");
+        console_write("Data: ");
+        console_write(read_buf);
+        console_write("\n");
+        
+        if (strcmp(write_buf, read_buf) == 0) {
+            console_write("Verification: PASSED\n");
+        } else {
+            console_write("Verification: FAILED\n");
+        }
+    } else {
+        console_write("Read: Failed\n");
+    }
+    
+    kfree(write_buf);
+    kfree(read_buf);
+}
+
 /* ---------- main shell loop ---------- */
 
 void shell_run(void)
@@ -607,6 +669,10 @@ void shell_run(void)
         else if (!strcmp(input, "mouse"))
         {
             cmd_mouse();
+        }
+        else if (!strcmp(input, "sata"))
+        {
+            cmd_sata();
         }
         else if (!strcmp(input, "shutdown"))
         {

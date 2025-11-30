@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <drivers/pci.h>
 
+// Forward declaration
+typedef struct block_device block_device_t;
+
 // AHCI PCI Class/Subclass
 #define PCI_CLASS_STORAGE    0x01
 #define PCI_SUBCLASS_SATA    0x06
@@ -39,6 +42,19 @@ typedef enum {
     FIS_TYPE_PIO_SETUP = 0x5F,  // PIO Setup
     FIS_TYPE_DEV_BITS  = 0xA1   // Set Device Bits
 } FIS_TYPE;
+
+// ATA Commands
+#define ATA_CMD_READ_DMA_EXT     0x25
+#define ATA_CMD_WRITE_DMA_EXT    0x35
+#define ATA_CMD_IDENTIFY         0xEC
+
+// ATA Status
+#define ATA_SR_BSY               0x80
+#define ATA_SR_DRQ               0x08
+#define ATA_SR_ERR               0x01
+
+// Port Interrupt Status Bit
+#define AHCI_PxIS_TFES           (1 << 30) // Task File Error Status
 
 // HBA Port Registers
 typedef struct {
@@ -141,7 +157,9 @@ typedef struct {
 
 // Function Prototypes
 int ahci_init(void);
+int ahci_identify(int port, uint16_t *buffer);
 int ahci_read(int port, uint64_t lba, uint16_t count, void *buffer);
 int ahci_write(int port, uint64_t lba, uint16_t count, const void *buffer);
+int ahci_get_block_device(int port, block_device_t *dev);
 
 #endif

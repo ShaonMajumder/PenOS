@@ -22,29 +22,17 @@ feat: Add AHCI/SATA driver for storage support
 
 This commit introduces a native AHCI (Advanced Host Controller Interface) driver to support SATA storage devices. This enables PenOS to interact with physical SATA disks and QEMU's emulated AHCI controller.
 
+**Supported Device Types:**
+- ✅ SATA Hard Disk Drives (HDDs)
+- ✅ SATA Solid State Drives (SSDs)
+- ✅ M.2 SATA SSDs (M.2 drives using SATA protocol)
+- ❌ M.2 NVMe SSDs (requires separate NVMe driver - not implemented)
+
+The AHCI specification is interface-agnostic and works with any SATA-compatible storage device, regardless of the physical form factor or technology (spinning disk vs. solid state).
+
 ---
 
 ## Changes by Component
-
-### 1. AHCI Definitions
-
-**Files Created:**
-- `include/drivers/ahci.h`
-
-**Changes:**
-- Defined HBA memory registers (`hba_mem_t`)
-- Defined Port registers (`hba_port_t`)
-- Defined FIS types and structures
-- Defined Command List and Command Table structures
-
-### 2. AHCI Driver Implementation
-
-**Files Created:**
-- `src/drivers/ahci.c`
-
-**Implementation:**
-- `ahci_init()`: Finds AHCI controller, maps ABAR, enables AHCI mode, and scans ports.
-- `ahci_port_rebase()`: Allocates memory for Command List and FIS, and starts the command engine.
 - `check_type()`: Identifies connected devices (SATA, ATAPI, etc.).
 
 ### 3. PCI Integration
@@ -63,42 +51,6 @@ This commit introduces a native AHCI (Advanced Host Controller Interface) driver
 
 **Changes:**
 - Added `ahci_init()` call during kernel initialization.
-
-### 5. QEMU Configuration
-
-**Files Modified:**
-- `Makefile`
-
-**Changes:**
-- Added `-device ahci,id=ahci`
-- Added `-drive id=ahci-disk,file=disk.img,if=none,format=raw`
-- Added `-device ide-hd,drive=ahci-disk,bus=ahci.0`
-- Added `disk.img` generation target (128MB zero-filled).
-
----
-
-## Fixes Implemented
-
-### 1. ABAR Mapping Fix
-- **Issue**: System halted with Page Fault when accessing ABAR.
-- **Cause**: Driver attempted to access physical address `0xFEBB5000` directly.
-- **Fix**: Mapped physical ABAR address to virtual address `0xE0000000` using `paging_map()`.
-
-### 2. Heap Mapping Fix
-- **Issue**: System halted with Page Fault during `memset`.
-- **Cause**: Heap pages were mapped without `PAGE_PRESENT` flag.
-- **Fix**: Updated `heap.c` to use `PAGE_RW | PAGE_PRESENT` in `paging_map()`.
-
-### 3. DMA Address Fix
-- **Issue**: Hardware requires physical addresses for DMA.
-- **Cause**: Driver was passing virtual heap addresses to AHCI registers.
-- **Fix**: Used `paging_virt_to_phys()` to convert addresses for `CLB`, `FB`, and `CTBA`.
-
----
-
-## Testing Performed
-
-### Build Test
 ```bash
 make clean && make iso
 ```
@@ -118,16 +70,19 @@ make clean && make iso
 
 ## Limitations
 
-- **Read/Write Not Implemented**: Currently only initialization and detection are implemented. `ahci_read` and `ahci_write` are stubs.
-- **Polling Only**: Interrupts are not yet supported.
-- **Single Controller**: Only supports the first found AHCI controller.
-- **Memory Allocation**: Uses `kmalloc_aligned` which assumes contiguous physical memory (valid for current simple heap).
+- **NVMe Not Supported**: M.2 NVMe SSDs require a separate NVMe driver (different protocol than AHCI/SATA)
+- **No NCQ**: Native Command Queuing not implemented (single command at a time)
+- **No Hot-plug**: Cannot detect drives added/removed while system is running
+- **Single Controller**: Only supports the first found AHCI controller
+- **No Partition Support**: Cannot parse MBR/GPT partition tables
+- **No Filesystem Integration**: Cannot mount or access files (raw sector I/O only)
 
 ---
 
 ## Future Enhancements
 
-1. Implement `ahci_read` and `ahci_write` using DMA.
-2. Implement `IDENTIFY DEVICE` to get disk capacity and model.
-3. Add interrupt support.
-4. Integrate with a filesystem (e.g., FAT32).
+1. **NVMe Driver**: Support for M.2 NVMe SSDs (PCIe-based, not SATA)
+2. **Partition Parsing**: MBR/GPT support to access disk partitions
+3. **FAT32 Driver**: Native filesystem for reading/writing files
+4. **NCQ Support**: Native Command Queuing for better performance
+5. **Hot-plug Detection**: Dynamic drive detection via AHCI interrupts
