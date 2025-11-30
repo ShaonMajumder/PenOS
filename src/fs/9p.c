@@ -302,6 +302,46 @@ int p9_open(uint32_t fid, uint32_t flags) {
     return 0;
 }
 
+// Read from file (READ for 9P2000.L)
+int p9_read(uint32_t fid, uint64_t offset, uint32_t count, void *data) {
+    uint8_t *p = tx_buffer;
+    p += 4;
+    *p++ = P9_TREAD;
+    write_u16(p, p9_tag++);
+    p += 2;
+    
+    write_u32(p, fid);
+    p += 4;
+    
+    // offset (64-bit)
+    write_u32(p, (uint32_t)offset);
+    p += 4;
+    write_u32(p, (uint32_t)(offset >> 32));
+    p += 4;
+    
+    write_u32(p, count);
+    p += 4;
+    
+    uint32_t size = p - tx_buffer;
+    write_u32(tx_buffer, size);
+    
+    uint32_t rx_len;
+    if (p9_rpc(tx_buffer, size, rx_buffer, &rx_len) != 0) {
+        return -1;
+    }
+    
+    if (rx_buffer[4] != P9_RREAD) {
+        return -1;
+    }
+    
+    // Copy data
+    uint32_t count_rx = read_u32(rx_buffer + 7);
+    if (count_rx > count) count_rx = count;
+    
+    memcpy(data, rx_buffer + 11, count_rx);
+    return count_rx;
+}
+
 // Read directory (READDIR for 9P2000.L)
 int p9_readdir(uint32_t fid, uint64_t offset, uint32_t count, void *data) {
     uint8_t *p = tx_buffer;
@@ -507,13 +547,33 @@ static uint64_t read_u64(const uint8_t *buf) {
     return low | (high << 32);
 }
 
-// Get file size using getattr (simplified - uses existing p9_read for now)
+// Get file size using getattr
 int p9_get_file_size(uint32_t fid, uint64_t *size)
 {
-    // For simplicity, we'll estimate by trying to read
-    // A proper implementation would use TGETATTR
-    // For now, return a reasonable default
-    *size = 1024 * 1024; // 1MB default
+    // Build TGETATTR message
+    uint32_t offset = 0;
+    write_u32(tx_buffer + offset, 0); // size (fill later)
+    offset += 4;
+    tx_buffer[offset++] = P9_TGETATTR;
+    write_u16(tx_buffer + offset, p9_tag++);
+    offset += 2;
+    write_u32(tx_buffer + offset, fid);
+    offset += 4;
+    write_u64(tx_buffer + offset, 0x00000FFFULL); // request_mask (all attrs)
+    offset += 8;
+    
+    write_u32(tx_buffer, offset); // Update size
+    
+    uint32_t rx_len = P9_MAX_MSG_SIZE;
+    if (p9_rpc(tx_buffer, offset, rx_buffer, &rx_len) != 0) {
+        return -1;
+    }
+    
+    // Parse RGETATTR response
+    // Skip: size(4) + type(1) + tag(2) + qid(13) + valid(8) + mode(4) + uid(4) + gid(4) + nlink(8) + rdev(8) + size(8)
+    uint32_t resp_offset = 4 + 1 + 2 + 13 + 8 + 4 + 4 + 4 + 8 + 8;
+    *size = read_u64(rx_buffer + resp_offset);
+    
     return 0;
 }
 
@@ -540,9 +600,22 @@ int p9_read_file(const char *path, void **buffer, uint32_t *size)
         return -1;
     }
     
-    // Allocate initial buffer (will grow if needed)
-    uint32_t buffer_size = 64 * 1024; // Start with 64KB
-    void *data = kmalloc(buffer_size);
+    // Get file size
+    uint64_t file_size;
+    if (p9_get_file_size(file_fid, &file_size) != 0) {
+        console_write("[9P] Failed to get file size\n");
+        p9_clunk(file_fid);
+        return -1;
+    }
+    
+    if (file_size == 0 || file_size > 10 * 1024 * 1024) { // Max 10MB
+        console_write("[9P] Invalid file size\n");
+        p9_clunk(file_fid);
+        return -1;
+    }
+    
+    // Allocate buffer
+    void *data = kmalloc((uint32_t)file_size);
     if (!data) {
         console_write("[9P] Failed to allocate buffer\n");
         p9_clunk(file_fid);
@@ -553,40 +626,27 @@ int p9_read_file(const char *path, void **buffer, uint32_t *size)
     uint32_t bytes_read = 0;
     uint32_t chunk_size = 4096; // Read 4KB at a time
     
-    while (bytes_read < buffer_size) {
-        uint32_t to_read = chunk_size;
+    while (bytes_read < file_size) {
+        uint32_t to_read = (file_size - bytes_read > chunk_size) ? chunk_size : (file_size - bytes_read);
         
         int result = p9_read(file_fid, bytes_read, to_read, (uint8_t*)data + bytes_read);
         if (result <= 0) {
-            break; // EOF or error
+            break;
         }
         
         bytes_read += result;
-        
-        // If we're getting close to buffer limit, expand
-        if (bytes_read + chunk_size > buffer_size) {
-            uint32_t new_size = buffer_size * 2;
-            void *new_data = kmalloc(new_size);
-            if (!new_data) {
-                break;
-            }
-            memcpy(new_data, data, bytes_read);
-            kfree(data);
-            data = new_data;
-            buffer_size = new_size;
-        }
     }
     
     p9_clunk(file_fid);
     
-    if (bytes_read == 0) {
-        console_write("[9P] Failed to read file\n");
+    if (bytes_read != file_size) {
+        console_write("[9P] Failed to read entire file\n");
         kfree(data);
         return -1;
     }
     
     *buffer = data;
-    *size = bytes_read;
+    *size = (uint32_t)file_size;
     
     return 0;
 }
