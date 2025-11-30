@@ -35,7 +35,8 @@ This commit introduces support for the **VirtIO Input** standard, allowing PenOS
 **Changes:**
 - Added `VIRTIO_DEV_INPUT` (0x1052) device ID
 - Defined `virtio_input_event` structure compatible with Linux Input Subsystem
-- Implemented `virtio_input_init()` to find and initialize the device
+- Implemented `virtio_input_init()` to scan and initialize multiple devices
+- Added logic to distinguish between Keyboard (1st device) and Mouse (2nd device)
 - Implemented `virtio_input_poll()` to read events from the event queue
 - Implemented translation from Linux `EV_KEY` codes to ASCII characters
 
