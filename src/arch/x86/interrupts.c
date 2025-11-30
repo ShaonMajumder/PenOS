@@ -184,14 +184,13 @@ interrupt_frame_t *isr_dispatch(interrupt_frame_t *frame)
 {
     uint8_t int_no = frame->int_no;
 
-    if (int_no < 20)
-    {
-        panic_with_frame(exception_messages[int_no], frame);
-    }
-
     if (handlers[int_no])
     {
         handlers[int_no](frame);
+    }
+    else if (int_no < 20)
+    {
+        panic_with_frame(exception_messages[int_no], frame);
     }
 
     if (int_no >= 32 && int_no <= 47)

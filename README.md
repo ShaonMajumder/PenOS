@@ -20,7 +20,7 @@ make iso        # Create bootable ISO
 make run        # Boot in QEMU
 ```
 
-**Shell commands:** `help`, `clear`, `echo`, `ticks`, `sysinfo`, `ps`, `spawn <counter|spinner>`, `kill <pid>`, `usermode`, `pwd`, `cd`, `ls`, `cat`, `satastatus`, `satarescan`, `mouse`, `shutdown`
+**Shell commands:** `help`, `clear`, `echo`, `ticks`, `sysinfo`, `ps`, `spawn <counter|spinner>`, `kill <pid>`, `exec <path>`, `usermode`, `pwd`, `cd`, `ls`, `cat`, `satastatus`, `satarescan`, `mouse`, `shutdown`
 
 **Tab completion:** Press `TAB` to autocomplete commands and file paths (e.g., `cd /mnt<TAB>`)
 
@@ -42,6 +42,7 @@ make run        # Boot in QEMU
 | **Virtual Memory** | Higher-half paging | Recursive mapping, identity mapping |
 | **Heap** | Freelist allocator | Dynamic allocation, coalescing, trimming |
 | **Page Size** | 4KB | Standard x86 paging |
+| **Demand Paging** | Page Fault Handler | Lazy allocation for user space |
 
 ### Drivers & Hardware
 | Driver | Type | Features |
@@ -85,6 +86,7 @@ make run        # Boot in QEMU
 | Feature | Status | Description |
 |---------|--------|-------------|
 | **User Mode (Ring 3)** | ✅ | Full privilege separation, TSS, syscall interface |
+| **Process Execution** | ✅ | `exec()` syscall, ELF binary loading |
 | **Process Isolation** | ✅ | Per-process page directories, separate address spaces |
 | **Multitasking** | ✅ | Preemptive round-robin, 100Hz timer |
 | **Memory Protection** | ✅ | Paging, user/kernel separation, per-process isolation |
@@ -113,10 +115,10 @@ make run        # Boot in QEMU
 | Area | What you get today | Deep-dive docs | Key sources |
 | --- | --- | --- | --- |
 | **Boot & CPU** | GRUB theme, `boot.s`, GDT/IDT, PIC, PIT @100Hz, TSS for Ring 3 | [`architecture.md`](docs/architecture.md#1-cpu-bring-up), [`bootstrap.md`](docs/commits/feature-core/1_bootstrap.md) | `grub/themes/penos`, `src/boot.s`, `src/arch/x86/` |
-| **Memory** | Bitmap PMM, higher-half paging, recursive mapping, freelist heap, per-process page directories | [`architecture.md`](docs/architecture.md#2-memory-management), [`pmm`](docs/commits/feature-pmm/1_bitmap_pmm.md), [`paging`](docs/commits/feature-paging/1_dynamic_vmm.md), [`heap`](docs/commits/feature-heap/), [`process-isolation`](docs/commits/feature-process-isolation/commit_1_per_process_page_directories.md) | `src/mem/` |
+| **Memory** | Bitmap PMM, higher-half paging, recursive mapping, freelist heap, per-process page directories, demand paging | [`architecture.md`](docs/architecture.md#2-memory-management), [`pmm`](docs/commits/feature-pmm/1_bitmap_pmm.md), [`paging`](docs/commits/feature-paging/1_dynamic_vmm.md), [`demand-paging`](docs/commits/feature-paging/2_demand_paging.md), [`heap`](docs/commits/feature-heap/), [`process-isolation`](docs/commits/feature-process-isolation/commit_1_per_process_page_directories.md) | `src/mem/` |
 | **Scheduler** | Preemptive round-robin, task lifecycle, zombie reaping, per-process address spaces | [`architecture.md`](docs/architecture.md#1-cpu-bring-up), [`scheduler`](docs/commits/feature-scheduler/) | `src/sched/sched.c` |
-| **User Mode** | Ring 3 execution, TSS, syscall library (`exit`, `write`, `yield`, `getpid`, `ticks`), process isolation | [`usermode`](docs/commits/feature-usermode/commit_1_usermode.md), [`syscalls`](docs/commits/feature-usermode/commit_2_syscall_interface.md) | `src/arch/x86/tss.c`, `src/sys/syscall.c`, `src/lib/syscall.c` |
-| **ELF Loader** | ELF32 parser, segment loading, memory mapping (foundation) | [`elf-loader`](docs/commits/feature-elf-loader/commit_1_elf_structures.md) | `src/fs/elf.c`, `include/fs/elf.h` |
+| **User Mode** | Ring 3 execution, TSS, syscall library (`exec`, `exit`, `write`, `yield`, `getpid`, `ticks`), process isolation | [`usermode`](docs/commits/feature-usermode/commit_1_usermode.md), [`syscalls`](docs/commits/feature-usermode/commit_2_syscall_interface.md), [`exec`](docs/commits/feature-exec/commit_1_exec_syscall_foundation.md) | `src/arch/x86/tss.c`, `src/sys/syscall.c`, `src/lib/syscall.c` |
+| **ELF Loader** | ELF32 parser, segment loading, memory mapping, binary execution | [`elf-loader`](docs/commits/feature-exec/commit_1_exec_syscall_foundation.md) | `src/fs/elf.c`, `include/fs/elf.h` |
 | **Filesystem** | VirtIO-9P (9P2000.L), `cd`, `ls`, `pwd`, `cat`, tab completion | [`virtio-9p`](docs/commits/feature-virtio-9p-filesystem/feature-virtio-9p-filesystem.md), [`tab-completion`](docs/commits/feature-virtio-9p-filesystem/commit_2_tab-completion.md) | `src/fs/9p.c`, `src/drivers/virtio.c` |
 | **Storage** | AHCI/SATA driver, hot-plug detection, identify, read/write, `satastatus`, `satarescan` | [`ahci-driver`](docs/commits/feature-ahci-sata/commit_1_driver.md), [`ahci-hotplug`](docs/commits/feature-ahci-sata/commit_2_hotplug.md) | `src/drivers/ahci.c` |
 | **Drivers** | PS/2 keyboard/mouse, VirtIO-Input (keyboard/mouse), VirtIO-Console (serial), PCI, PC Speaker | [`architecture.md`](docs/architecture.md#3-devices-and-drivers), [`mouse`](docs/commits/feature-mouse/1_ps2_mouse.md), [`virtio-input`](docs/commits/feature-virtio-input/commit_1_virtio_input.md), [`virtio-mouse`](docs/commits/feature-virtio-input/commit_2_mouse.md), [`virtio-console`](docs/commits/feature-virtio-console/commit_1_serial.md), [`speaker`](docs/commits/feature-pc-speaker/) | `src/drivers/` |
@@ -131,9 +133,9 @@ make run        # Boot in QEMU
 
 ### Feature Documentation
 - **Core:** [Bootstrap](docs/commits/feature-core/1_bootstrap.md)
-- **Memory:** [PMM](docs/commits/feature-pmm/1_bitmap_pmm.md), [Paging](docs/commits/feature-paging/1_dynamic_vmm.md), [Heap](docs/commits/feature-heap/)
+- **Memory:** [PMM](docs/commits/feature-pmm/1_bitmap_pmm.md), [Paging](docs/commits/feature-paging/1_dynamic_vmm.md), [Demand Paging](docs/commits/feature-paging/2_demand_paging.md), [Heap](docs/commits/feature-heap/)
 - **Scheduler:** [Preemptive RR](docs/commits/feature-scheduler/1_preemptive_rr.md), [Task Lifecycle](docs/commits/feature-scheduler/2_task_lifecycle.md)
-- **User Mode:** [Ring 3 Support](docs/commits/feature-usermode/commit_1_usermode.md), [Syscall Interface](docs/commits/feature-usermode/commit_2_syscall_interface.md)
+- **User Mode:** [Ring 3 Support](docs/commits/feature-usermode/commit_1_usermode.md), [Syscall Interface](docs/commits/feature-usermode/commit_2_syscall_interface.md), [Exec & ELF](docs/commits/feature-exec/commit_1_exec_syscall_foundation.md)
 - **Filesystem:** [VirtIO-9P](docs/commits/feature-virtio-9p-filesystem/feature-virtio-9p-filesystem.md), [Tab Completion](docs/commits/feature-virtio-9p-filesystem/commit_2_tab-completion.md)
 - **Storage:** [AHCI Driver](docs/commits/feature-ahci-sata/commit_1_driver.md), [Hot-Plug](docs/commits/feature-ahci-sata/commit_2_hotplug.md)
 - **Drivers:** [Mouse](docs/commits/feature-mouse/1_ps2_mouse.md), [VirtIO-Input](docs/commits/feature-virtio-input/), [VirtIO-Console](docs/commits/feature-virtio-console/commit_1_serial.md), [PC Speaker](docs/commits/feature-pc-speaker/)

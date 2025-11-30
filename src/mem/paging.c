@@ -2,6 +2,7 @@
 #include "mem/pmm.h"
 #include "ui/console.h"
 #include <string.h>
+#include "arch/x86/interrupts.h"
 
 #define PAGE_TABLE_ENTRIES 1024
 #define PAGE_DIRECTORY_ENTRIES 1024
@@ -129,6 +130,38 @@ static void map_kernel_higher_half(void)
     }
 }
 
+void page_fault_handler(interrupt_frame_t *frame)
+{
+    uint32_t faulting_address;
+    __asm__ volatile("mov %%cr2, %0" : "=r"(faulting_address));
+
+    int present = !(frame->err_code & 0x1);
+    int rw = frame->err_code & 0x2;
+    int user = frame->err_code & 0x4;
+    int reserved = frame->err_code & 0x8;
+
+    // Demand paging: if page is not present and it's a user access, allocate it
+    if (!present && user) {
+        uint32_t phys = alloc_frame_zero();
+        uint32_t page_aligned_virt = faulting_address & ~0xFFF;
+        paging_map(page_aligned_virt, phys, PAGE_PRESENT | PAGE_RW | PAGE_USER);
+        return;
+    }
+
+    console_write("Page Fault! (");
+    if (present) console_write("present ");
+    if (rw) console_write("read-only ");
+    if (user) console_write("user-mode ");
+    if (reserved) console_write("reserved ");
+    console_write(") at 0x");
+    console_write_hex(faulting_address);
+    console_write("\n");
+    
+    for (;;) {
+        __asm__ volatile("cli; hlt");
+    }
+}
+
 void paging_init(void)
 {
     current_pd_phys = alloc_frame_zero();
@@ -141,6 +174,8 @@ void paging_init(void)
     map_kernel_higher_half();
 
     load_page_directory(current_pd_phys);
+    
+    register_interrupt_handler(14, page_fault_handler);
     console_write("Paging enabled. Kernel mapped at higher half.\n");
 }
 
