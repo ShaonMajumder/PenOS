@@ -44,13 +44,6 @@ static void destroy_task(task_entry_t *task);
 static void reap_zombies(void);
 static task_entry_t *pick_next_task(void);
 
-// Defined in paging.c
-void paging_map(uint32_t virt, uint32_t phys, uint32_t flags);
-uint32_t paging_virt_to_phys(uint32_t virt);
-#define PAGE_PRESENT 0x1
-#define PAGE_RW      0x2
-#define PAGE_USER    0x4
-
 // Defined in tss.c
 #include "arch/x86/tss.h"
 

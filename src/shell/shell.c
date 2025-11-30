@@ -755,8 +755,6 @@ void shell_run(void)
         {
             cmd_exec(input + 5);
         }
-#ifdef FS_FS_H
-        }
         else if (!strcmp(input, "pwd"))
         {
             cmd_pwd();
@@ -776,7 +774,6 @@ void shell_run(void)
         else if (!strncmp(input, "cat ", 4))
         {
             cmd_cat(input + 4);
-#endif
         }
         else if (!strcmp(input, "halt"))
         {
