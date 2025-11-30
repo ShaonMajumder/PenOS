@@ -6,6 +6,7 @@
 #define PAGE_PRESENT     0x00000001
 #define PAGE_RW          0x00000002
 #define PAGE_USER        0x00000004
+#define PAGE_SWAPPED     0x00000200
 #define KERNEL_VIRT_BASE 0xC0000000
 
 void paging_init(void);

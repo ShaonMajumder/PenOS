@@ -139,7 +139,7 @@ void page_fault_handler(interrupt_frame_t *frame)
     uint32_t faulting_address;
     __asm__ volatile("mov %%cr2, %0" : "=r"(faulting_address));
 
-    int present = !(frame->err_code & 0x1);
+    int present = frame->err_code & 0x1;
     int rw = frame->err_code & 0x2;
     int user = frame->err_code & 0x4;
     int reserved = frame->err_code & 0x8;
@@ -152,8 +152,8 @@ void page_fault_handler(interrupt_frame_t *frame)
         uint32_t pt_index = (page_aligned_virt >> 12) & 0x3FFU;
         uint32_t entry = table[pt_index];
         
-        // If entry is not present but has a value, it's a swap slot
-        if (!(entry & PAGE_PRESENT) && entry != 0) {
+        // If entry is not present but has PAGE_SWAPPED bit, it's a swap slot
+        if (!(entry & PAGE_PRESENT) && (entry & PAGE_SWAPPED)) {
             uint32_t swap_slot = entry >> 12;
             
             console_write("Swap: Page fault on swapped page. Slot: ");
@@ -190,7 +190,7 @@ void page_fault_handler(interrupt_frame_t *frame)
     if (rw) console_write("read-only ");
     if (user) console_write("user-mode ");
     if (reserved) console_write("reserved ");
-    console_write(") at 0x");
+    console_write(") at ");
     console_write_hex(faulting_address);
     console_write("\n");
     
@@ -217,14 +217,14 @@ int paging_swap_out(uint32_t virt) {
         return -1;
     }
     
-    // Update PTE: Not Present, store swap slot in bits 12-31
-    table[pt_index] = (swap_slot << 12); // Present bit is 0
+    // Update PTE: Not Present, store swap slot in bits 12-31, set PAGE_SWAPPED
+    table[pt_index] = (swap_slot << 12) | PAGE_SWAPPED; // Present bit is 0
     invlpg(page_aligned_virt);
     
     // Free physical frame
     pmm_free_frame(phys);
     
-    console_write("Swap: Swapped out page 0x");
+    console_write("Swap: Swapped out page ");
     console_write_hex(page_aligned_virt);
     console_write(" to slot ");
     console_write_dec(swap_slot);
