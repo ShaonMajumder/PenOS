@@ -28,7 +28,37 @@ $(BUILD)/%.o: src/%.s
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/kernel.bin: $(OBJS)
-	$(LD) $(LDFLAGS) -o $@ $(OBJS)
+	$(LD) $(LDFLAGS) -o $@ \
+		$(BUILD)/apps/sysinfo.o \
+		$(BUILD)/arch/x86/gdt.o \
+		$(BUILD)/arch/x86/idt.o \
+		$(BUILD)/arch/x86/interrupts.o \
+		$(BUILD)/arch/x86/pic.o \
+		$(BUILD)/arch/x86/timer.o \
+		$(BUILD)/drivers/keyboard.o \
+		$(BUILD)/drivers/mouse.o \
+		$(BUILD)/drivers/pci.o \
+		$(BUILD)/drivers/virtio.o \
+		$(BUILD)/drivers/virtio_console.o \
+		$(BUILD)/drivers/virtio_input.o \
+		$(BUILD)/drivers/ahci.o \
+		$(BUILD)/fs/9p.o \
+		$(BUILD)/fs/fs.o \
+		$(BUILD)/fs/penfs.o \
+		$(BUILD)/kernel.o \
+		$(BUILD)/lib/string.o \
+		$(BUILD)/mem/heap.o \
+		$(BUILD)/mem/paging.o \
+		$(BUILD)/mem/pmm.o \
+		$(BUILD)/sched/sched.o \
+		$(BUILD)/shell/shell.o \
+		$(BUILD)/sys/power.o \
+		$(BUILD)/sys/syscall.o \
+		$(BUILD)/ui/console.o \
+		$(BUILD)/ui/framebuffer.o \
+		$(BUILD)/arch/x86/gdt_flush.o \
+		$(BUILD)/arch/x86/isr_stubs.o \
+		$(BUILD)/boot.o
 
 iso: $(BUILD)/kernel.bin grub/grub.cfg grub/themes/penos/theme.txt grub/themes/penos/penos-boot-splash.png
 	@mkdir -p $(BUILD)/iso/boot/grub
@@ -37,7 +67,7 @@ iso: $(BUILD)/kernel.bin grub/grub.cfg grub/themes/penos/theme.txt grub/themes/p
 	if [ -d grub/themes ]; then cp -r grub/themes $(BUILD)/iso/boot/grub/; fi
 	grub-mkrescue -o PenOS.iso $(BUILD)/iso
 
-run: all
+run: all disk.img
 	qemu-system-i386 -cdrom PenOS.iso \
 		-device virtio-9p-pci,disable-modern=on,fsdev=wsl,mount_tag=wsl \
 		-fsdev local,id=wsl,path=/,security_model=none \
@@ -45,7 +75,13 @@ run: all
 		-device virtio-mouse-pci,disable-modern=on \
 		-device virtio-serial-pci,disable-modern=on \
 		-chardev stdio,id=cons0,mux=on \
-		-device virtconsole,chardev=cons0
+		-device virtconsole,chardev=cons0 \
+		-drive id=ahci-disk,file=disk.img,if=none,format=raw \
+		-device ahci,id=ahci \
+		-device ide-hd,drive=ahci-disk,bus=ahci.0
+
+disk.img:
+	dd if=/dev/zero of=disk.img bs=1M count=128
 
 clean:
 	rm -rf $(BUILD) PenOS.iso

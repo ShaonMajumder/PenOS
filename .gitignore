@@ -6,3 +6,4 @@ build/
 *.iso
 *.log
 *.tmp
+disk.img

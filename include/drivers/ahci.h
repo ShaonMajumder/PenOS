@@ -1,0 +1,147 @@
+#ifndef DRIVERS_AHCI_H
+#define DRIVERS_AHCI_H
+
+#include <stdint.h>
+#include <drivers/pci.h>
+
+// AHCI PCI Class/Subclass
+#define PCI_CLASS_STORAGE    0x01
+#define PCI_SUBCLASS_SATA    0x06
+#define PCI_PROG_IF_AHCI     0x01
+
+// Generic Host Control
+#define AHCI_GHC_AE          (1 << 31)  // AHCI Enable
+#define AHCI_GHC_MRSM        (1 << 2)   // MSI Revert to Single Message
+#define AHCI_GHC_IE          (1 << 1)   // Interrupt Enable
+#define AHCI_GHC_HR          (1 << 0)   // HBA Reset
+
+// Port Command Register
+#define AHCI_CMD_ST          (1 << 0)   // Start
+#define AHCI_CMD_SUD         (1 << 1)   // Spin-Up Device
+#define AHCI_CMD_POD         (1 << 2)   // Power On Device
+#define AHCI_CMD_CLO         (1 << 3)   // Command List Override
+#define AHCI_CMD_FRE         (1 << 4)   // FIS Receive Enable
+#define AHCI_CMD_FR          (1 << 14)  // FIS Receive Running
+#define AHCI_CMD_CR          (1 << 15)  // Command List Running
+
+// Port Status Register
+#define AHCI_STS_DET_PRESENT 0x3
+#define AHCI_STS_IPM_ACTIVE  0x1
+
+// FIS Types
+typedef enum {
+    FIS_TYPE_REG_H2D   = 0x27,  // Host to Device
+    FIS_TYPE_REG_D2H   = 0x34,  // Device to Host
+    FIS_TYPE_DMA_ACT   = 0x39,  // DMA Activate
+    FIS_TYPE_DMA_SETUP = 0x41,  // DMA Setup
+    FIS_TYPE_DATA      = 0x46,  // Data
+    FIS_TYPE_BIST      = 0x58,  // BIST Activate
+    FIS_TYPE_PIO_SETUP = 0x5F,  // PIO Setup
+    FIS_TYPE_DEV_BITS  = 0xA1   // Set Device Bits
+} FIS_TYPE;
+
+// HBA Port Registers
+typedef struct {
+    uint32_t clb;        // Command list base
+    uint32_t clbu;       // Command list base upper
+    uint32_t fb;         // FIS base
+    uint32_t fbu;        // FIS base upper
+    uint32_t is;         // Interrupt status
+    uint32_t ie;         // Interrupt enable
+    uint32_t cmd;        // Command and status
+    uint32_t rsv0;       // Reserved
+    uint32_t tfd;        // Task file data
+    uint32_t sig;        // Signature
+    uint32_t ssts;       // SATA status
+    uint32_t sctl;       // SATA control
+    uint32_t serr;       // SATA error
+    uint32_t sact;       // SATA active
+    uint32_t ci;         // Command issue
+    uint32_t sntf;       // SATA notification
+    uint32_t fbs;        // FIS-based switch control
+    uint32_t rsv1[11];
+    uint32_t vendor[4];
+} __attribute__((packed)) hba_port_t;
+
+// HBA Memory Registers
+typedef struct {
+    uint32_t cap;        // Host capabilities
+    uint32_t ghc;        // Global host control
+    uint32_t is;         // Interrupt status
+    uint32_t pi;         // Ports implemented
+    uint32_t vs;         // Version
+    uint32_t ccc_ctl;    // Command completion coalescing control
+    uint32_t ccc_pts;    // Command completion coalescing ports
+    uint32_t em_loc;     // Enclosure management location
+    uint32_t em_ctl;     // Enclosure management control
+    uint32_t cap2;       // Host capabilities extended
+    uint32_t bohc;       // BIOS/OS handoff control
+    uint8_t  rsv[0xA0-0x2C];
+    uint8_t  vendor[0x100-0xA0];
+    hba_port_t ports[1]; // 1-32 ports
+} __attribute__((packed)) hba_mem_t;
+
+// Command Header
+typedef struct {
+    uint8_t  cfl:5;      // Command FIS length (in DWORDs)
+    uint8_t  a:1;        // ATAPI
+    uint8_t  w:1;        // Write (1=H2D, 0=D2H)
+    uint8_t  p:1;        // Prefetchable
+    uint8_t  r:1;        // Reset
+    uint8_t  b:1;        // BIST
+    uint8_t  c:1;        // Clear busy
+    uint8_t  rsv0:1;
+    uint8_t  pmp:4;      // Port multiplier port
+    uint16_t prdtl;      // PRDT length
+    uint32_t prdbc;      // PRD byte count
+    uint32_t ctba;       // Command table base (low)
+    uint32_t ctbau;      // Command table base (high)
+    uint32_t rsv1[4];
+} __attribute__((packed)) hba_cmd_header_t;
+
+// PRDT Entry
+typedef struct {
+    uint32_t dba;        // Data base address
+    uint32_t dbau;       // Data base address upper
+    uint32_t rsv0;
+    uint32_t dbc:22;     // Byte count (0-based, max 4MB)
+    uint32_t rsv1:9;
+    uint32_t i:1;        // Interrupt on completion
+} __attribute__((packed)) hba_prdt_entry_t;
+
+// Command Table
+typedef struct {
+    uint8_t  cfis[64];   // Command FIS
+    uint8_t  acmd[16];   // ATAPI command
+    uint8_t  rsv[48];
+    hba_prdt_entry_t prdt_entry[1];  // Variable length
+} __attribute__((packed)) hba_cmd_table_t;
+
+// Register FIS - Host to Device
+typedef struct {
+    uint8_t  fis_type;   // 0x27
+    uint8_t  pmport:4;
+    uint8_t  rsv0:3;
+    uint8_t  c:1;        // 1=Command, 0=Control
+    uint8_t  command;    // ATA command
+    uint8_t  featurel;
+    uint8_t  lba0;       // LBA bits 0-7
+    uint8_t  lba1;       // LBA bits 8-15
+    uint8_t  lba2;       // LBA bits 16-23
+    uint8_t  device;
+    uint8_t  lba3;       // LBA bits 24-31
+    uint8_t  lba4;       // LBA bits 32-39
+    uint8_t  lba5;       // LBA bits 40-47
+    uint8_t  featureh;
+    uint16_t count;      // Sector count
+    uint8_t  icc;
+    uint8_t  control;
+    uint32_t rsv1;
+} __attribute__((packed)) fis_reg_h2d_t;
+
+// Function Prototypes
+int ahci_init(void);
+int ahci_read(int port, uint64_t lba, uint16_t count, void *buffer);
+int ahci_write(int port, uint64_t lba, uint16_t count, const void *buffer);
+
+#endif

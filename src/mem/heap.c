@@ -40,7 +40,7 @@ static void map_new_page(uint32_t virt)
             __asm__ volatile ("cli; hlt");
         }
     }
-    paging_map(virt, frame, PAGE_RW);
+    paging_map(virt, frame, PAGE_RW | PAGE_PRESENT);
     memset((void *)virt, 0, PAGE_SIZE);
 }
 
@@ -146,7 +146,23 @@ void *kmalloc(size_t size)
         block->prev = tail;
     }
     allocated_bytes += block->size;
-    return (uint8_t *)block + BLOCK_OVERHEAD;
+    return (void *)((uint8_t *)block + BLOCK_OVERHEAD);
+}
+
+void *kmalloc_aligned(size_t size, size_t alignment) {
+    // Simple implementation: allocate extra space and return aligned pointer
+    // Note: This is wasteful and doesn't handle freeing correctly for now
+    // (kfree assumes the pointer points to the block header)
+    // For AHCI initialization which is done once, this is acceptable.
+    
+    void *ptr = kmalloc(size + alignment + BLOCK_OVERHEAD);
+    if (!ptr) return NULL;
+    
+    uint32_t addr = (uint32_t)ptr;
+    uint32_t aligned_addr = (addr + alignment - 1) & ~(alignment - 1);
+    
+    // We're leaking the padding bytes here, but for static driver structures it's fine
+    return (void *)aligned_addr;
 }
 
 void kfree(void *ptr)

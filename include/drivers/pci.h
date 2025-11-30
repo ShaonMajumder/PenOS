@@ -41,6 +41,7 @@ void pci_init(void);
 uint32_t pci_read_config(uint8_t bus, uint8_t device, uint8_t func, uint8_t offset);
 void pci_write_config(uint8_t bus, uint8_t device, uint8_t func, uint8_t offset, uint32_t value);
 pci_device_t* pci_find_virtio_device(uint16_t device_id);
+pci_device_t* pci_find_ahci(void);
 int pci_get_device_count(void);
 pci_device_t* pci_get_device(int index);
 

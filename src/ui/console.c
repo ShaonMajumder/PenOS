@@ -1,6 +1,7 @@
 #include "ui/console.h"
 #include "arch/x86/io.h"
 #include "ui/framebuffer.h"
+#include <drivers/virtio_console.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -103,6 +104,9 @@ void console_clear(void)
 
 void console_putc(char c)
 {
+    // Also send to serial console for scrolling/logging
+    virtio_console_putc(c);
+
     if (c == '\n') {
         cursor_x = 0;
         cursor_y++;

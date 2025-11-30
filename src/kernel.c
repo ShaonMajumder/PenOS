@@ -11,6 +11,7 @@
 #include "drivers/pci.h"
 #include "drivers/virtio.h"
 #include "drivers/virtio_console.h"
+#include "drivers/ahci.h"
 #include "mem/pmm.h"
 #include "mem/paging.h"
 #include "mem/heap.h"
@@ -62,9 +63,13 @@ void kernel_main(uint32_t magic, multiboot_info_t *mb_info)
     mouse_init();
     pci_init();
     
-    // Initialize VirtIO drivers
-    virtio_input_init();
+    // Initialize VirtIO Console early for logging
     virtio_console_init();
+    
+    ahci_init();
+    
+    // Initialize other VirtIO drivers
+    virtio_input_init();
     
     syscall_init();
     sched_init();

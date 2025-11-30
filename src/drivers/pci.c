@@ -92,6 +92,23 @@ pci_device_t* pci_find_virtio_device(uint16_t device_id) {
     return NULL;
 }
 
+// Find AHCI controller
+pci_device_t* pci_find_ahci(void) {
+    for (int i = 0; i < pci_device_count; i++) {
+        // Class 01 (Mass Storage), Subclass 06 (SATA), ProgIF 01 (AHCI)
+        // Note: We need to check ProgIF which isn't currently stored in pci_device_t
+        // So we'll read it from config space again
+        if (pci_devices[i].class_code == 0x01 && pci_devices[i].subclass == 0x06) {
+            uint32_t class_reg = pci_read_config(pci_devices[i].bus, pci_devices[i].device, pci_devices[i].function, 0x08);
+            uint8_t prog_if = (class_reg >> 8) & 0xFF;
+            if (prog_if == 0x01) {
+                return &pci_devices[i];
+            }
+        }
+    }
+    return NULL;
+}
+
 int pci_get_device_count(void) {
     return pci_device_count;
 }
