@@ -38,25 +38,36 @@ static uint32_t alloc_frame_zero(void)
     return phys;
 }
 
-static uint32_t *get_page_table(uint32_t virt, int create)
+static uint32_t *get_page_table(uint32_t virt, int create, uint32_t flags)
 {
     uint32_t pd_index = virt >> 22;
     uint32_t entry = current_pd[pd_index];
+    
     if (!(entry & PAGE_PRESENT)) {
         if (!create) {
             return NULL;
         }
         uint32_t table_phys = alloc_frame_zero();
-        current_pd[pd_index] = table_phys | PAGE_PRESENT | PAGE_RW;
+        uint32_t pd_flags = PAGE_PRESENT | PAGE_RW;
+        if (flags & PAGE_USER) {
+            pd_flags |= PAGE_USER;
+        }
+        current_pd[pd_index] = table_phys | pd_flags;
         entry = current_pd[pd_index];
+    } else {
+        // If PDE exists but we need User access, update it
+        if ((flags & PAGE_USER) && !(entry & PAGE_USER)) {
+            current_pd[pd_index] |= PAGE_USER;
+        }
     }
+    
     uint32_t table_phys = entry & ~0xFFFU;
     return phys_to_ptr(table_phys);
 }
 
 void paging_map(uint32_t virt, uint32_t phys, uint32_t flags)
 {
-    uint32_t *table = get_page_table(virt, 1);
+    uint32_t *table = get_page_table(virt, 1, flags);
     uint32_t pt_index = (virt >> 12) & 0x3FFU;
     table[pt_index] = (phys & ~0xFFFU) | PAGE_PRESENT | (flags & 0xFFFU);
     invlpg(virt);
@@ -64,7 +75,7 @@ void paging_map(uint32_t virt, uint32_t phys, uint32_t flags)
 
 void paging_unmap(uint32_t virt)
 {
-    uint32_t *table = get_page_table(virt, 0);
+    uint32_t *table = get_page_table(virt, 0, 0);
     if (!table) {
         return;
     }
@@ -75,7 +86,7 @@ void paging_unmap(uint32_t virt)
 
 uint32_t paging_virt_to_phys(uint32_t virt)
 {
-    uint32_t *table = get_page_table(virt, 0);
+    uint32_t *table = get_page_table(virt, 0, 0);
     if (!table) {
         return 0;
     }

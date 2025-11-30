@@ -35,6 +35,7 @@ $(BUILD)/kernel.bin: $(OBJS)
 		$(BUILD)/arch/x86/interrupts.o \
 		$(BUILD)/arch/x86/pic.o \
 		$(BUILD)/arch/x86/timer.o \
+		$(BUILD)/arch/x86/tss.o \
 		$(BUILD)/drivers/keyboard.o \
 		$(BUILD)/drivers/mouse.o \
 		$(BUILD)/drivers/pci.o \

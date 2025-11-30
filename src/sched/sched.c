@@ -23,6 +23,7 @@ typedef struct task_entry {
     interrupt_frame_t *frame;
     void (*entry)(void);
     uint8_t *stack;
+    uint32_t kernel_stack; // ESP0 for TSS
 } task_entry_t;
 
 static task_entry_t tasks[MAX_TASKS];
@@ -40,6 +41,16 @@ static task_entry_t *find_task_by_id(uint32_t id);
 static void destroy_task(task_entry_t *task);
 static void reap_zombies(void);
 static task_entry_t *pick_next_task(void);
+
+// Defined in paging.c
+void paging_map(uint32_t virt, uint32_t phys, uint32_t flags);
+uint32_t paging_virt_to_phys(uint32_t virt);
+#define PAGE_PRESENT 0x1
+#define PAGE_RW      0x2
+#define PAGE_USER    0x4
+
+// Defined in tss.c
+#include "arch/x86/tss.h"
 
 void sched_init(void)
 {
@@ -97,6 +108,80 @@ static int32_t spawn_task(void (*entry)(void), const char *name)
     frame->eip = (uint32_t)task_trampoline;
     frame->cs = 0x08;
     frame->eflags = 0x202; /* IF=1 */
+
+    task->frame = frame;
+    task->kernel_stack = stack_top; // For kernel tasks, ESP0 is the same as initial stack
+
+    active_tasks++;
+    return (int32_t)task->id;
+}
+
+int32_t sched_spawn_user(void (*entry)(void), const char *name)
+{
+    int slot = find_free_slot();
+    if (slot < 0) return -1;
+
+    // 1. Allocate Kernel Stack (for syscalls/interrupts)
+    uint8_t *kstack = (uint8_t *)kmalloc(STACK_SIZE);
+    if (!kstack) return -1;
+    uint32_t kstack_top = ((uint32_t)kstack + STACK_SIZE) & ~0xF;
+
+    // 2. Allocate User Stack
+    // For simplicity, we alloc a page from kernel heap and map it as User
+    // In a real OS, we'd allocate a frame and map it to a fixed user virtual address
+    uint8_t *ustack = (uint8_t *)kmalloc(STACK_SIZE);
+    if (!ustack) {
+        kfree(kstack);
+        return -1;
+    }
+    
+    // Remap user stack pages as User-accessible (Ring 3)
+    // Assuming STACK_SIZE is page aligned or small enough. 4096 is 1 page.
+    uint32_t ustack_phys = paging_virt_to_phys((uint32_t)ustack);
+    if (ustack_phys) {
+        paging_map((uint32_t)ustack, ustack_phys, PAGE_PRESENT | PAGE_RW | PAGE_USER);
+    }
+    
+    // Also map the entry point code as User-accessible if it's in kernel space
+    // NOTE: This is a hack for the demo. Normally user code is loaded separately.
+    // We assume the code is in the identity mapped region.
+    uint32_t entry_phys = paging_virt_to_phys((uint32_t)entry);
+    if (entry_phys) {
+        // Map the page containing the entry point
+        paging_map((uint32_t)entry & 0xFFFFF000, entry_phys & 0xFFFFF000, PAGE_PRESENT | PAGE_RW | PAGE_USER);
+    }
+
+    uint32_t ustack_top = ((uint32_t)ustack + STACK_SIZE) & ~0xF;
+
+    task_entry_t *task = &tasks[slot];
+    memset(task, 0, sizeof(*task));
+    task->id = next_task_id++;
+    task->state = TASK_READY;
+    task->entry = entry;
+    strncpy(task->name, name, sizeof(task->name) - 1);
+    task->stack = kstack; // We track kernel stack for cleanup
+    task->kernel_stack = kstack_top; // ESP0
+
+    // Set up interrupt frame on KERNEL stack
+    // When we IRET, we will pop: EIP, CS, EFLAGS, ESP, SS (since changing privilege)
+    interrupt_frame_t *frame = (interrupt_frame_t *)(kstack_top - sizeof(interrupt_frame_t));
+    memset(frame, 0, sizeof(*frame));
+
+    frame->gs = frame->fs = frame->es = frame->ds = 0x23; // User Data (0x20 | 3)
+    frame->edi = 0;
+    frame->esi = 0;
+    frame->ebp = ustack_top;
+    frame->user_esp = ustack_top; // User ESP
+    frame->ebx = 0;
+    frame->edx = 0;
+    frame->ecx = 0;
+    frame->eax = 0;
+    frame->int_no = 0;
+    frame->err_code = 0;
+    frame->eip = (uint32_t)entry;
+    frame->cs = 0x1B; // User Code (0x18 | 3)
+    frame->eflags = 0x202; /* IF=1 */
+    frame->ss = 0x23; // User Data (0x20 | 3) - Stack Segment
 
     task->frame = frame;
 
@@ -195,6 +280,9 @@ interrupt_frame_t *sched_tick(interrupt_frame_t *frame)
 
     current_task = next;
     current_task->state = TASK_RUNNING;
+
+    // Update TSS ESP0 for the new task
+    tss_set_stack(current_task->kernel_stack);
 
     if (!current_task->frame) {
         current_task->frame = frame;

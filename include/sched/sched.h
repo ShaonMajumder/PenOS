@@ -21,6 +21,7 @@ typedef void (*sched_iter_cb)(const sched_task_info_t *info);
 
 void sched_init(void);
 int32_t sched_spawn_named(const char *name);
+int32_t sched_spawn_user(void (*entry)(void), const char *name);
 int sched_kill(uint32_t id);
 interrupt_frame_t *sched_tick(interrupt_frame_t *frame);
 uint32_t sched_task_count(void);

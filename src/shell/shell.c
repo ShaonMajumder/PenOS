@@ -623,6 +623,37 @@ static void cmd_satarescan(void) {
     ahci_scan_ports();
 }
 
+static void user_mode_test_task(void) {
+    // String on stack to ensure it's in user-accessible memory
+    char msg[] = "[User] Hello from Ring 3!\n";
+    
+    while (1) {
+        // Syscall 0 (write)
+        // EAX = 0, EBX = string pointer
+        __asm__ volatile (
+            "mov $0, %%eax\n"
+            "mov %0, %%ebx\n"
+            "int $0x80\n"
+            : : "r"(msg) : "eax", "ebx"
+        );
+        
+        // Delay
+        for (volatile int i = 0; i < 10000000; i++);
+    }
+}
+
+static void cmd_usermode(void) {
+    console_write("Spawning User Mode task...\n");
+    int32_t pid = sched_spawn_user(user_mode_test_task, "user_test");
+    if (pid > 0) {
+        console_write("Spawned user task PID: ");
+        console_write_dec(pid);
+        console_write("\n");
+    } else {
+        console_write("Failed to spawn user task.\n");
+    }
+}
+
 /* ---------- main shell loop ---------- */
 
 void shell_run(void)
@@ -720,6 +751,14 @@ void shell_run(void)
         else if (!strcmp(input, "satarescan"))
         {
             cmd_satarescan();
+        }
+        else if (!strcmp(input, "usermode"))
+        {
+            cmd_usermode();
+        }
+        else if (!strcmp(input, "usermode"))
+        {
+            cmd_usermode();
         }
         else if (!strcmp(input, "shutdown"))
         {

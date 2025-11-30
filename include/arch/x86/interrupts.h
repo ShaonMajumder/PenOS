@@ -8,6 +8,7 @@ typedef struct interrupt_frame
     uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;
     uint32_t int_no, err_code;
     uint32_t eip, cs, eflags;
+    uint32_t user_esp, ss; // Pushed by CPU on privilege change
 } interrupt_frame_t;
 
 typedef void (*isr_t)(interrupt_frame_t *frame);
