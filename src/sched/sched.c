@@ -1,3 +1,16 @@
+#include <sched/sched.h>
+#include <ui/console.h>
+#include <mem/heap.h>
+#include <mem/paging.h>
+#include <mem/pmm.h>
+#include <fs/elf.h>
+#include <string.h>
+#include <stdint.h>
+#include <stddef.h>
+
+#ifdef SCHED_DEBUG
+#define SCHED_LOG(msg) console_write(msg)
+#else
 #define SCHED_LOG(msg) ((void)0)
 #endif
 
