@@ -3,7 +3,6 @@
 ## Commit Details
 **Title:** fs: Add ELF binary loader infrastructure
 **Date:** 2025-11-30
-**Author:** Antigravity (Assistant)
 **Status:** 🚧 In Progress - Foundation Complete
 
 ## Description

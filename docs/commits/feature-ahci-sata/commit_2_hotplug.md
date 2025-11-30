@@ -1,15 +1,3 @@
-# Feature: AHCI Hot-Plug Support
-
-## Commit Details
-**Title:** drivers: Implement AHCI hot-plug detection and shell commands
-**Date:** 2025-11-30
-**Author:** Antigravity (Assistant)
-
-## Description
-This commit adds hot-plug support to the AHCI driver, allowing PenOS to detect SATA drives being added or removed while the system is running. It also introduces new shell commands to monitor and manage SATA ports.
-
-## Key Changes
-
 ### 1. AHCI Driver (`src/drivers/ahci.c`, `include/drivers/ahci.h`)
 - **Interrupt Handling**: Added support for `AHCI_PORT_IS_PCS` (Port Connect Status) and `AHCI_PORT_IS_PRCS` (PhyRdy Change Status) interrupts.
 - **Port Status Tracking**: Implemented `port_status` and `port_initialized` arrays to track the state of all 32 ports.

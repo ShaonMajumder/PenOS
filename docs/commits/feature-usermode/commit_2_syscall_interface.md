@@ -3,7 +3,6 @@
 ## Commit Details
 **Title:** sys: Implement user-space syscall library and kernel handlers
 **Date:** 2025-11-30
-**Author:** Antigravity (Assistant)
 
 ## Description
 This commit introduces a proper system call interface for user-mode applications. It provides a C-callable library that wraps the low-level `int 0x80` mechanism, making it easy to write user programs without inline assembly. New syscalls for process management (`exit`, `yield`, `getpid`) are added alongside the existing `write` and `ticks` syscalls.

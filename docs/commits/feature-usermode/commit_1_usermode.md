@@ -3,7 +3,6 @@
 ## Commit Details
 **Title:** arch/x86: Implement User Mode (Ring 3) execution and syscalls
 **Date:** 2025-11-30
-**Author:** Antigravity (Assistant)
 
 ## Description
 This commit introduces the infrastructure required to execute code in User Mode (Ring 3). It implements the Task State Segment (TSS), updates the Global Descriptor Table (GDT) with user segments, and enhances the scheduler to support spawning user tasks.
