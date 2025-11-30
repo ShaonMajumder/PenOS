@@ -3,6 +3,8 @@
 #include "ui/console.h"
 #include "arch/x86/timer.h"
 #include "mem/pmm.h"
+#include "mem/paging.h"
+#include "mem/heap.h"
 #include "apps/sysinfo.h"
 #include "sched/sched.h"
 #include "sys/power.h"
@@ -316,20 +318,7 @@ static void cmd_help(void)
 #endif
     console_write("  satastatus        Show SATA port status\n");
     console_write("  satarescan        Rescan SATA ports\n");
-    console_write("  satastatus        Show SATA port status\n");
-    console_write("  satarescan        Rescan SATA ports\n");
-    console_putc('\n');
-    console_write("Examples:\n");
-    console_write("  echo hello world\n");
-    console_write("  spawn counter\n");
-    console_write("  ps\n");
-    console_write("  kill 3\n");
-#ifdef FS_FS_H
-    console_write("  pwd\n");
-    console_write("  cd /\n");
-    console_write("  ls\n");
-    console_write("  cat hello.txt\n");
-#endif
+    console_write("  swaptest          Test swap space functionality\n");
     console_putc('\n');
 }
 
@@ -646,6 +635,51 @@ static void cmd_satarescan(void) {
     ahci_scan_ports();
 }
 
+static void cmd_swaptest(void) {
+    console_write("Swap: Allocating test page...\n");
+    
+    // Allocate a page-aligned buffer
+    uint32_t *page = (uint32_t*)kmalloc_aligned(PAGE_SIZE, PAGE_SIZE);
+    if (!page) {
+        console_write("Swap: Failed to allocate page\n");
+        return;
+    }
+    
+    console_write("Swap: Writing data to 0x");
+    console_write_hex((uint32_t)page);
+    console_write("\n");
+    
+    // Write pattern
+    for (int i = 0; i < 1024; i++) {
+        page[i] = i;
+    }
+    
+    console_write("Swap: Swapping out page...\n");
+    if (paging_swap_out((uint32_t)page) != 0) {
+        console_write("Swap: Failed to swap out (is swap enabled?)\n");
+        kfree(page);
+        return;
+    }
+    
+    console_write("Swap: Page swapped out. Accessing to trigger fault...\n");
+    
+    // Read and verify
+    int errors = 0;
+    for (int i = 0; i < 1024; i++) {
+        if (page[i] != (uint32_t)i) {
+            errors++;
+        }
+    }
+    
+    if (errors == 0) {
+        console_write("Swap: Test PASSED! Data verified.\n");
+    } else {
+        console_write("Swap: Test FAILED! Data mismatch.\n");
+    }
+    
+    kfree(page);
+}
+
 static void user_mode_test_task(void) {
     // ALL strings must be on stack to be in user-accessible memory
     char msg1[] = "[User] Hello from Ring 3! PID=";
@@ -795,9 +829,9 @@ void shell_run(void)
         {
             cmd_satarescan();
         }
-        else if (!strcmp(input, "usermode"))
+        else if (!strcmp(input, "swaptest"))
         {
-            cmd_usermode();
+            cmd_swaptest();
         }
         else if (!strcmp(input, "usermode"))
         {

@@ -20,4 +20,7 @@ void paging_switch_directory(uint32_t pd_phys);
 void paging_destroy_directory(uint32_t pd_phys);
 uint32_t paging_get_kernel_directory(void);
 
+// Manually swap out a page (for testing)
+int paging_swap_out(uint32_t virt);
+
 #endif

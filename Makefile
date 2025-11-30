@@ -9,24 +9,6 @@ SRCS := $(shell find src -name "*.c")
 ASMS := $(shell find src -name "*.S" -o -name "*.s")
 ASM_OBJS := $(patsubst src/%, $(BUILD)/%, $(ASMS))
 ASM_OBJS := $(ASM_OBJS:.S=.o)
-ASM_OBJS := $(ASM_OBJS:.s=.o)
-OBJS := $(patsubst src/%, $(BUILD)/%, $(SRCS:.c=.o)) \
-         $(ASM_OBJS)
-
-all: $(BUILD)/kernel.bin iso
-
-$(BUILD)/%.o: src/%.c
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD)/%.o: src/%.S
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD)/%.o: src/%.s
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
-
 $(BUILD)/kernel.bin: $(OBJS)
 	$(LD) $(LDFLAGS) -o $@ \
 		$(BUILD)/apps/sysinfo.o \
@@ -54,6 +36,7 @@ $(BUILD)/kernel.bin: $(OBJS)
 		$(BUILD)/mem/heap.o \
 		$(BUILD)/mem/paging.o \
 		$(BUILD)/mem/pmm.o \
+		$(BUILD)/mem/swap.o \
 		$(BUILD)/sched/sched.o \
 		$(BUILD)/shell/shell.o \
 		$(BUILD)/sys/power.o \

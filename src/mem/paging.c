@@ -130,6 +130,10 @@ static void map_kernel_higher_half(void)
     }
 }
 
+#include <mem/swap.h>
+
+// ...
+
 void page_fault_handler(interrupt_frame_t *frame)
 {
     uint32_t faulting_address;
@@ -140,10 +144,43 @@ void page_fault_handler(interrupt_frame_t *frame)
     int user = frame->err_code & 0x4;
     int reserved = frame->err_code & 0x8;
 
+    uint32_t page_aligned_virt = faulting_address & ~0xFFF;
+
+    // Check if page is swapped out
+    uint32_t *table = get_page_table(page_aligned_virt, 0, 0);
+    if (table) {
+        uint32_t pt_index = (page_aligned_virt >> 12) & 0x3FFU;
+        uint32_t entry = table[pt_index];
+        
+        // If entry is not present but has a value, it's a swap slot
+        if (!(entry & PAGE_PRESENT) && entry != 0) {
+            uint32_t swap_slot = entry >> 12;
+            
+            console_write("Swap: Page fault on swapped page. Slot: ");
+            console_write_dec(swap_slot);
+            console_write("\n");
+            
+            // Allocate new frame
+            uint32_t phys = alloc_frame_zero();
+            
+            // Map it first so we can write to it
+            paging_map(page_aligned_virt, phys, PAGE_PRESENT | PAGE_RW | PAGE_USER);
+            
+            // Read from swap
+            if (swap_in(swap_slot, (void*)page_aligned_virt) != 0) {
+                console_write("Swap: Failed to read from swap!\n");
+                // Handle error...
+            }
+            
+            // Free swap slot
+            swap_free(swap_slot);
+            return;
+        }
+    }
+
     // Demand paging: if page is not present and it's a user access, allocate it
     if (!present && user) {
         uint32_t phys = alloc_frame_zero();
-        uint32_t page_aligned_virt = faulting_address & ~0xFFF;
         paging_map(page_aligned_virt, phys, PAGE_PRESENT | PAGE_RW | PAGE_USER);
         return;
     }
@@ -160,6 +197,40 @@ void page_fault_handler(interrupt_frame_t *frame)
     for (;;) {
         __asm__ volatile("cli; hlt");
     }
+}
+
+int paging_swap_out(uint32_t virt) {
+    uint32_t page_aligned_virt = virt & ~0xFFF;
+    uint32_t *table = get_page_table(page_aligned_virt, 0, 0);
+    if (!table) return -1;
+    
+    uint32_t pt_index = (page_aligned_virt >> 12) & 0x3FFU;
+    uint32_t entry = table[pt_index];
+    
+    if (!(entry & PAGE_PRESENT)) return -1; // Not present
+    
+    uint32_t phys = entry & ~0xFFF;
+    uint32_t swap_slot;
+    
+    // Write to swap
+    if (swap_out((void*)page_aligned_virt, &swap_slot) != 0) {
+        return -1;
+    }
+    
+    // Update PTE: Not Present, store swap slot in bits 12-31
+    table[pt_index] = (swap_slot << 12); // Present bit is 0
+    invlpg(page_aligned_virt);
+    
+    // Free physical frame
+    pmm_free_frame(phys);
+    
+    console_write("Swap: Swapped out page 0x");
+    console_write_hex(page_aligned_virt);
+    console_write(" to slot ");
+    console_write_dec(swap_slot);
+    console_write("\n");
+    
+    return 0;
 }
 
 void paging_init(void)
