@@ -105,7 +105,7 @@ run-windows: all disk.img
 		-machine pcspk-audiodev=snd0
 
 disk.img:
-	dd if=/dev/zero of=disk.img bs=1M count=128
+	dd if=/dev/zero of=disk.img bs=1M count=256
 
 clean:
 	rm -rf $(BUILD) PenOS.iso

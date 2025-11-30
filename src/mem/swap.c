@@ -3,7 +3,7 @@
 #include <ui/console.h>
 #include <string.h>
 
-#define SWAP_START_LBA  409600 // Start at 200MB
+#define SWAP_START_LBA  200000 // Start at ~100MB
 #define SWAP_SIZE_PAGES 4096   // 16MB swap space
 #define SECTORS_PER_PAGE 8     // 4096 / 512 = 8
 

@@ -645,7 +645,7 @@ static void cmd_swaptest(void) {
         return;
     }
     
-    console_write("Swap: Writing data to 0x");
+    console_write("Swap: Writing data to ");
     console_write_hex((uint32_t)page);
     console_write("\n");
     
