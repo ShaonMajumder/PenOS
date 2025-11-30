@@ -8,5 +8,6 @@ void write(const char *str);
 uint32_t ticks(void);
 void yield(void);
 uint32_t getpid(void);
+int exec(const char *path);
 
 #endif

@@ -493,3 +493,100 @@ int p9_list_directory(const char *path) {
     p9_clunk(fid);
     return 0;
 }
+
+// Helper: write 64-bit value
+static void write_u64(uint8_t *buf, uint64_t val) {
+    write_u32(buf, (uint32_t)(val & 0xFFFFFFFF));
+    write_u32(buf + 4, (uint32_t)(val >> 32));
+}
+
+// Helper: read 64-bit value
+static uint64_t read_u64(const uint8_t *buf) {
+    uint64_t low = read_u32(buf);
+    uint64_t high = read_u32(buf + 4);
+    return low | (high << 32);
+}
+
+// Get file size using getattr (simplified - uses existing p9_read for now)
+int p9_get_file_size(uint32_t fid, uint64_t *size)
+{
+    // For simplicity, we'll estimate by trying to read
+    // A proper implementation would use TGETATTR
+    // For now, return a reasonable default
+    *size = 1024 * 1024; // 1MB default
+    return 0;
+}
+
+// Read entire file into buffer
+int p9_read_file(const char *path, void **buffer, uint32_t *size)
+{
+    if (!p9_initialized) {
+        return -1;
+    }
+    
+    // Walk to file
+    uint32_t file_fid = next_fid++;
+    if (p9_walk(1, file_fid, path) != 0) {
+        console_write("[9P] Failed to walk to file: ");
+        console_write(path);
+        console_write("\n");
+        return -1;
+    }
+    
+    // Open file for reading
+    if (p9_open(file_fid, 0) != 0) { // O_RDONLY = 0
+        console_write("[9P] Failed to open file\n");
+        p9_clunk(file_fid);
+        return -1;
+    }
+    
+    // Allocate initial buffer (will grow if needed)
+    uint32_t buffer_size = 64 * 1024; // Start with 64KB
+    void *data = kmalloc(buffer_size);
+    if (!data) {
+        console_write("[9P] Failed to allocate buffer\n");
+        p9_clunk(file_fid);
+        return -1;
+    }
+    
+    // Read file in chunks
+    uint32_t bytes_read = 0;
+    uint32_t chunk_size = 4096; // Read 4KB at a time
+    
+    while (bytes_read < buffer_size) {
+        uint32_t to_read = chunk_size;
+        
+        int result = p9_read(file_fid, bytes_read, to_read, (uint8_t*)data + bytes_read);
+        if (result <= 0) {
+            break; // EOF or error
+        }
+        
+        bytes_read += result;
+        
+        // If we're getting close to buffer limit, expand
+        if (bytes_read + chunk_size > buffer_size) {
+            uint32_t new_size = buffer_size * 2;
+            void *new_data = kmalloc(new_size);
+            if (!new_data) {
+                break;
+            }
+            memcpy(new_data, data, bytes_read);
+            kfree(data);
+            data = new_data;
+            buffer_size = new_size;
+        }
+    }
+    
+    p9_clunk(file_fid);
+    
+    if (bytes_read == 0) {
+        console_write("[9P] Failed to read file\n");
+        kfree(data);
+        return -1;
+    }
+    
+    *buffer = data;
+    *size = bytes_read;
+    
+    return 0;
+}

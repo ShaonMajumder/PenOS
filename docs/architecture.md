@@ -39,6 +39,6 @@ PenOS currently boots through GRUB, which loads `kernel.bin` and hands control t
 
 ## TODO highlights
 
-- Extend the shell, add filesystem plus storage drivers, and build richer framebuffer demos (mouse cursors, sprites, windows) on top of the new drawing primitives.
+- Build richer framebuffer demos (mouse cursors, sprites, windows) on top of the new drawing primitives.
 - Expand the syscall table (and eventually raise the gate's DPL) so ring-3 processes can invoke richer kernel services.
 - Add user-mode tasks plus IPC so the new lifecycle/shell APIs manage more than demo workers.

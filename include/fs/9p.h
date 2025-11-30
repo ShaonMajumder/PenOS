@@ -16,6 +16,8 @@
 #define P9_RREAD     117
 #define P9_TCLUNK    120
 #define P9_RCLUNK    121
+#define P9_TGETATTR  24
+#define P9_RGETATTR  25
 
 #define P9_NOTAG  ((uint16_t)(~0))
 #define P9_NOFID  ((uint32_t)(~0))
@@ -55,10 +57,15 @@ int p9_version(void);
 int p9_attach(const char *uname, const char *aname);
 int p9_walk(uint32_t fid, uint32_t newfid, const char *path);
 int p9_open(uint32_t fid, uint32_t flags);
+int p9_read(uint32_t fid, uint64_t offset, uint32_t count, void *data);
 int p9_readdir(uint32_t fid, uint64_t offset, uint32_t count, void *data);
 void p9_clunk(uint32_t fid);
 int p9_list_directory(const char *path);
 const char* p9_getcwd(void);
 int p9_change_directory(const char *path);
+
+// High-level file operations
+int p9_read_file(const char *path, void **buffer, uint32_t *size);
+int p9_get_file_size(uint32_t fid, uint64_t *size);
 
 #endif

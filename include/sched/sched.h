@@ -22,6 +22,7 @@ typedef void (*sched_iter_cb)(const sched_task_info_t *info);
 void sched_init(void);
 int32_t sched_spawn_named(const char *name);
 int32_t sched_spawn_user(void (*entry)(void), const char *name);
+int32_t sched_spawn_elf(const char *path);
 int sched_kill(uint32_t id);
 void sched_yield(void);
 uint32_t sched_get_current_pid(void);

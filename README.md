@@ -6,18 +6,16 @@
 
 ## 🎯 Overview
 
-PenOS is a portfolio-ready operating system that demonstrates low-level systems programming mastery. It boots via GRUB, shows a graphical splash screen, and provides an interactive shell with filesystem access, multitasking, and hardware I/O—all running on bare metal or in QEMU/VirtualBox.
-
-**For recruiters:** Clean architecture, extensive documentation, and modern development practices.  
-**For technical reviewers:** Modular codebase (`arch`, `mem`, `drivers`, `sched`, `shell`, `ui`), comprehensive commit history, and real hardware support.  
-**For learners:** Well-documented subsystems from bootloader to user mode, perfect for understanding OS fundamentals.
+PenOS is a operating system that demonstrates low-level systems programming mastery. It boots via GRUB, shows a graphical splash screen, and provides an interactive shell with filesystem access, multitasking, and hardware I/O—all running on bare metal or in QEMU/VirtualBox.
 
 ## 🚀 Quick Start
 
-**Requirements:** `gcc` (32-bit support), `ld`, `grub-mkrescue`, `xorriso`, `qemu-system-i386`
+**Requirements:** `gcc` (32-bit support), `ld`, `grub-mkrescue`, `xorriso`, `qemu-system-i386` in windows
+or you can boot from iso mounted on a disk or pendrive.
 
 ```bash
-make            # Build kernel
+wsl -d ubuntu
+make clean      # Build kernel
 make iso        # Create bootable ISO
 make run        # Boot in QEMU
 ```
@@ -115,13 +113,14 @@ make run        # Boot in QEMU
 | Area | What you get today | Deep-dive docs | Key sources |
 | --- | --- | --- | --- |
 | **Boot & CPU** | GRUB theme, `boot.s`, GDT/IDT, PIC, PIT @100Hz, TSS for Ring 3 | [`architecture.md`](docs/architecture.md#1-cpu-bring-up), [`bootstrap.md`](docs/commits/feature-core/1_bootstrap.md) | `grub/themes/penos`, `src/boot.s`, `src/arch/x86/` |
-| **Memory** | Bitmap PMM, higher-half paging, recursive mapping, freelist heap | [`architecture.md`](docs/architecture.md#2-memory-management), [`pmm`](docs/commits/feature-pmm/1_bitmap_pmm.md), [`paging`](docs/commits/feature-paging/1_dynamic_vmm.md), [`heap`](docs/commits/feature-heap/) | `src/mem/` |
-| **Scheduler** | Preemptive round-robin, task lifecycle, zombie reaping | [`architecture.md`](docs/architecture.md#1-cpu-bring-up), [`scheduler`](docs/commits/feature-scheduler/) | `src/sched/sched.c` |
-| **User Mode** | Ring 3 execution, TSS, syscall library (`exit`, `write`, `yield`, `getpid`) | [`usermode`](docs/commits/feature-usermode/commit_1_usermode.md), [`syscalls`](docs/commits/feature-usermode/commit_2_syscall_interface.md) | `src/arch/x86/tss.c`, `src/sys/syscall.c`, `src/lib/syscall.c` |
+| **Memory** | Bitmap PMM, higher-half paging, recursive mapping, freelist heap, per-process page directories | [`architecture.md`](docs/architecture.md#2-memory-management), [`pmm`](docs/commits/feature-pmm/1_bitmap_pmm.md), [`paging`](docs/commits/feature-paging/1_dynamic_vmm.md), [`heap`](docs/commits/feature-heap/), [`process-isolation`](docs/commits/feature-process-isolation/commit_1_per_process_page_directories.md) | `src/mem/` |
+| **Scheduler** | Preemptive round-robin, task lifecycle, zombie reaping, per-process address spaces | [`architecture.md`](docs/architecture.md#1-cpu-bring-up), [`scheduler`](docs/commits/feature-scheduler/) | `src/sched/sched.c` |
+| **User Mode** | Ring 3 execution, TSS, syscall library (`exit`, `write`, `yield`, `getpid`, `ticks`), process isolation | [`usermode`](docs/commits/feature-usermode/commit_1_usermode.md), [`syscalls`](docs/commits/feature-usermode/commit_2_syscall_interface.md) | `src/arch/x86/tss.c`, `src/sys/syscall.c`, `src/lib/syscall.c` |
+| **ELF Loader** | ELF32 parser, segment loading, memory mapping (foundation) | [`elf-loader`](docs/commits/feature-elf-loader/commit_1_elf_structures.md) | `src/fs/elf.c`, `include/fs/elf.h` |
 | **Filesystem** | VirtIO-9P (9P2000.L), `cd`, `ls`, `pwd`, `cat`, tab completion | [`virtio-9p`](docs/commits/feature-virtio-9p-filesystem/feature-virtio-9p-filesystem.md), [`tab-completion`](docs/commits/feature-virtio-9p-filesystem/commit_2_tab-completion.md) | `src/fs/9p.c`, `src/drivers/virtio.c` |
-| **Storage** | AHCI/SATA driver, hot-plug, identify, read/write | [`ahci-driver`](docs/commits/feature-ahci-sata/commit_1_driver.md), [`ahci-hotplug`](docs/commits/feature-ahci-sata/commit_2_hotplug.md) | `src/drivers/ahci.c` |
-| **Drivers** | PS/2 keyboard/mouse, VirtIO-Input, VirtIO-Console, PCI, PC Speaker | [`architecture.md`](docs/architecture.md#3-devices-and-drivers), [`mouse`](docs/commits/feature-mouse/1_ps2_mouse.md), [`virtio-input`](docs/commits/feature-virtio-input/), [`speaker`](docs/commits/feature-pc-speaker/) | `src/drivers/` |
-| **UI** | Framebuffer splash, console overlay, VGA fallback, shell | [`architecture.md`](docs/architecture.md#5-ui-and-shell), [`framebuffer`](docs/commits/feature-framebuffer/1_framebuffer-console.md) | `src/ui/`, `src/shell/shell.c` |
+| **Storage** | AHCI/SATA driver, hot-plug detection, identify, read/write, `satastatus`, `satarescan` | [`ahci-driver`](docs/commits/feature-ahci-sata/commit_1_driver.md), [`ahci-hotplug`](docs/commits/feature-ahci-sata/commit_2_hotplug.md) | `src/drivers/ahci.c` |
+| **Drivers** | PS/2 keyboard/mouse, VirtIO-Input (keyboard/mouse), VirtIO-Console (serial), PCI, PC Speaker | [`architecture.md`](docs/architecture.md#3-devices-and-drivers), [`mouse`](docs/commits/feature-mouse/1_ps2_mouse.md), [`virtio-input`](docs/commits/feature-virtio-input/commit_1_virtio_input.md), [`virtio-mouse`](docs/commits/feature-virtio-input/commit_2_mouse.md), [`virtio-console`](docs/commits/feature-virtio-console/commit_1_serial.md), [`speaker`](docs/commits/feature-pc-speaker/) | `src/drivers/` |
+| **UI** | Framebuffer splash, console overlay, VGA fallback, shell with tab completion | [`architecture.md`](docs/architecture.md#5-ui-and-shell), [`framebuffer`](docs/commits/feature-framebuffer/1_framebuffer-console.md), [`tab-completion`](docs/commits/feature-virtio-9p-filesystem/commit_2_tab-completion.md) | `src/ui/`, `src/shell/shell.c` |
 
 ## 📚 Documentation
 

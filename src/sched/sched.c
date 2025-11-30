@@ -1,15 +1,3 @@
-#include "sched/sched.h"
-#include "mem/heap.h"
-#include "ui/console.h"
-#include <string.h>
-
-#ifndef SCHED_DEBUG
-#define SCHED_DEBUG 0
-#endif
-
-#if SCHED_DEBUG
-#define SCHED_LOG(msg) console_write(msg)
-#else
 #define SCHED_LOG(msg) ((void)0)
 #endif
 
@@ -194,6 +182,88 @@ int32_t sched_spawn_user(void (*entry)(void), const char *name)
     frame->cs = 0x1B; // User Code (0x18 | 3)
     frame->eflags = 0x202; /* IF=1 */
     frame->ss = 0x23; // User Data (0x20 | 3) - Stack Segment
+
+    task->frame = frame;
+
+    active_tasks++;
+    return (int32_t)task->id;
+}
+
+int32_t sched_spawn_elf(const char *path)
+{
+    int slot = find_free_slot();
+    if (slot < 0) return -1;
+
+    // 1. Create new page directory
+    uint32_t new_pd_phys = paging_create_directory();
+    if (!new_pd_phys) return -1;
+
+    // 2. Allocate Kernel Stack
+    uint8_t *kstack = (uint8_t *)kmalloc(STACK_SIZE);
+    if (!kstack) {
+        paging_destroy_directory(new_pd_phys);
+        return -1;
+    }
+    uint32_t kstack_top = ((uint32_t)kstack + STACK_SIZE) & ~0xF;
+
+    // 3. Switch to new PD to load ELF
+    uint32_t old_pd = paging_get_kernel_directory();
+    paging_switch_directory(new_pd_phys);
+    
+    // 4. Load ELF
+    uint32_t entry_point = 0;
+    uint32_t result = elf_load(path, &entry_point);
+    
+    if (result == 0) {
+        // Failed to load
+        paging_switch_directory(old_pd);
+        kfree(kstack);
+        paging_destroy_directory(new_pd_phys);
+        return -1;
+    }
+    
+    // 5. Allocate User Stack
+    // Map 16KB of stack at 0xBFFFF000
+    uint32_t ustack_top = 0xC0000000 - 0x1000;
+    for (int i = 0; i < 4; i++) {
+        uint32_t page_vaddr = ustack_top - (i * 0x1000);
+        uint32_t phys = pmm_alloc_frame();
+        paging_map(page_vaddr, phys, PAGE_PRESENT | PAGE_RW | PAGE_USER);
+    }
+    
+    // Switch back
+    paging_switch_directory(old_pd);
+
+    // 6. Setup Task
+    task_entry_t *task = &tasks[slot];
+    memset(task, 0, sizeof(*task));
+    task->id = next_task_id++;
+    task->state = TASK_READY;
+    task->entry = (void (*)(void))entry_point;
+    strncpy(task->name, path, sizeof(task->name) - 1);
+    task->stack = kstack;
+    task->kernel_stack = kstack_top;
+    task->page_directory_phys = new_pd_phys;
+
+    // 7. Setup Interrupt Frame
+    interrupt_frame_t *frame = (interrupt_frame_t *)(kstack_top - sizeof(interrupt_frame_t));
+    memset(frame, 0, sizeof(*frame));
+
+    frame->gs = frame->fs = frame->es = frame->ds = 0x23; // User Data
+    frame->edi = 0;
+    frame->esi = 0;
+    frame->ebp = 0;
+    frame->user_esp = ustack_top + 0x1000 - 16; // Top of stack
+    frame->ebx = 0;
+    frame->edx = 0;
+    frame->ecx = 0;
+    frame->eax = 0;
+    frame->int_no = 0;
+    frame->err_code = 0;
+    frame->eip = entry_point;
+    frame->cs = 0x1B; // User Code
+    frame->eflags = 0x202; // IF=1
+    frame->ss = 0x23; // User Data
 
     task->frame = frame;
 

@@ -6,7 +6,8 @@
 #define SYS_TICKS   2
 #define SYS_YIELD   3
 #define SYS_GETPID  4
+#define SYS_EXEC    5
 
-#define SYSCALL_MAX 5
+#define SYSCALL_MAX 6
 
 #endif

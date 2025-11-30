@@ -1,5 +1,5 @@
 #include "fs/elf.h"
-#include "fs/fs.h"
+#include "fs/9p.h"
 #include "mem/heap.h"
 #include "mem/paging.h"
 #include "ui/console.h"
@@ -54,22 +54,20 @@ int elf_validate(const void *data, uint32_t size)
 // Load ELF binary from filesystem
 uint32_t elf_load(const char *path, uint32_t *entry_point)
 {
-    // Read file from filesystem
-    const char *file_data = fs_find(path);
-    if (!file_data) {
-        console_write("[ELF] File not found: ");
+    // Read file from filesystem using 9P
+    void *file_data = NULL;
+    uint32_t file_size = 0;
+    
+    if (p9_read_file(path, &file_data, &file_size) != 0) {
+        console_write("[ELF] Failed to read file: ");
         console_write(path);
         console_write("\n");
         return 0;
     }
-
-    // Get file size (we need a way to get this from fs_find)
-    // For now, assume it's null-terminated or we read a fixed size
-    // This is a limitation - we need fs_stat or similar
-    uint32_t file_size = strlen(file_data); // HACK: This won't work for binary data!
     
     // Validate ELF
     if (elf_validate(file_data, file_size) != 0) {
+        kfree(file_data);
         return 0;
     }
 
@@ -129,6 +127,9 @@ uint32_t elf_load(const char *path, uint32_t *entry_point)
 
     *entry_point = ehdr->e_entry;
     console_write("[ELF] Load complete\n");
+    
+    // Free the file buffer
+    kfree(file_data);
     
     return ehdr->e_entry; // Return entry point as base address
 }

@@ -527,6 +527,28 @@ static void cmd_kill(const char *args)
     }
 }
 
+static void cmd_exec(const char *args)
+{
+    while (*args == ' ') args++;
+    if (*args == '\0') {
+        console_write("Usage: exec <path>\n");
+        return;
+    }
+    
+    int32_t pid = sched_spawn_elf(args);
+    if (pid < 0) {
+        console_write("Failed to execute: ");
+        console_write(args);
+        console_write("\n");
+    } else {
+        console_write("Started process ");
+        console_write_dec(pid);
+        console_write(": ");
+        console_write(args);
+        console_write("\n");
+    }
+}
+
 #include <drivers/ahci.h>
 #include <mem/heap.h>
 
@@ -728,6 +750,11 @@ void shell_run(void)
         else if (!strncmp(input, "kill ", 5))
         {
             cmd_kill(input + 5);
+        }
+        else if (!strncmp(input, "exec ", 5))
+        {
+            cmd_exec(input + 5);
+        }
 #ifdef FS_FS_H
         }
         else if (!strcmp(input, "pwd"))

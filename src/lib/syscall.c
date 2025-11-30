@@ -51,3 +51,8 @@ uint32_t getpid(void)
 {
     return (uint32_t)syscall0(SYS_GETPID);
 }
+
+int exec(const char *path)
+{
+    return syscall1(SYS_EXEC, (uint32_t)path);
+}

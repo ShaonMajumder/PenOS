@@ -5,6 +5,9 @@
 
 #include "sys/syscall_nums.h"
 #include "sched/sched.h"
+#include "fs/elf.h"
+#include "mem/pmm.h"
+#include "mem/paging.h"
 
 typedef int32_t (*syscall_fn)(interrupt_frame_t *frame);
 
@@ -70,12 +73,67 @@ static int32_t sys_getpid(interrupt_frame_t *frame)
     return (int32_t)sched_get_current_pid();
 }
 
+static int32_t sys_exec(interrupt_frame_t *frame)
+{
+    const char *path = (const char *)frame->ebx;
+    if (!path) {
+        return -1;
+    }
+    
+    console_write("[exec] Loading: ");
+    console_write(path);
+    console_write("\n");
+    
+    uint32_t entry_point = 0;
+    uint32_t result = elf_load(path, &entry_point);
+    
+    if (result == 0) {
+        console_write("[exec] Failed to load ELF\n");
+        return -1;
+    }
+
+    // Setup User Stack
+    // Map 16KB of stack at the top of user space (0xBFFFF000)
+    // We use 0xC0000000 (KERNEL_VIRT_BASE) as the limit
+    uint32_t stack_top = 0xC0000000 - 0x1000; 
+    
+    for (int i = 0; i < 4; i++) {
+        uint32_t page_vaddr = stack_top - (i * 0x1000);
+        uint32_t phys = pmm_alloc_frame();
+        if (!phys) {
+            console_write("[exec] Failed to allocate stack\n");
+            return -1;
+        }
+        paging_map(page_vaddr, phys, PAGE_PRESENT | PAGE_RW | PAGE_USER);
+    }
+
+    // Update Interrupt Frame to jump to new entry point
+    frame->eip = entry_point;
+    frame->user_esp = stack_top + 0x1000 - 16; // Small padding at top
+    
+    // Reset registers
+    frame->eax = 0;
+    frame->ebx = 0;
+    frame->ecx = 0;
+    frame->edx = 0;
+    frame->esi = 0;
+    frame->edi = 0;
+    frame->ebp = 0;
+
+    console_write("[exec] Jump to 0x");
+    console_write_hex(entry_point);
+    console_write("\n");
+
+    return 0;
+}
+
 static syscall_fn syscall_table[SYSCALL_MAX] = {
     [SYS_EXIT]   = sys_exit,
     [SYS_WRITE]  = sys_write,
     [SYS_TICKS]  = sys_ticks,
     [SYS_YIELD]  = sys_yield,
     [SYS_GETPID] = sys_getpid,
+    [SYS_EXEC]   = sys_exec,
 };
 
 static void syscall_handler(interrupt_frame_t *frame)
