@@ -5,8 +5,10 @@
 #include <mem/heap.h>
 #include <string.h>
 
-static virtio_device_t input_dev;
+static virtio_device_t input_dev; // Keyboard
+static virtio_device_t mouse_dev; // Mouse
 static int input_initialized = 0;
+static int mouse_initialized = 0;
 
 // Linux Input Event Codes (simplified)
 #define EV_KEY 0x01
@@ -95,54 +97,66 @@ typedef struct {
 
 static mouse_state_t mouse_state = {0, 0, 0};
 
-static virtio_input_event_t events[32]; // Buffer for events
+static virtio_input_event_t events[32];       // Buffer for keyboard events
+static virtio_input_event_t mouse_events[32]; // Buffer for mouse events
+
+// Helper to process a single event
+static void process_event(virtio_input_event_t *evt) {
+    if (evt->type == EV_KEY && evt->value == 1) { // Key press
+        if (evt->code < sizeof(key_map)) {
+            char c = key_map[evt->code];
+            if (c) {
+                keyboard_push_char(c);
+            }
+        }
+    } else if (evt->type == EV_REL) { // Mouse movement
+        if (evt->code == REL_X) {
+            mouse_state.x += (int32_t)evt->value;
+        } else if (evt->code == REL_Y) {
+            mouse_state.y += (int32_t)evt->value;
+        }
+    } else if (evt->type == EV_KEY) { // Mouse buttons
+        if (evt->code == BTN_LEFT) {
+            if (evt->value) mouse_state.buttons |= 1;
+            else mouse_state.buttons &= ~1;
+        } else if (evt->code == BTN_RIGHT) {
+            if (evt->value) mouse_state.buttons |= 2;
+            else mouse_state.buttons &= ~2;
+        } else if (evt->code == BTN_MIDDLE) {
+            if (evt->value) mouse_state.buttons |= 4;
+            else mouse_state.buttons &= ~4;
+        }
+    }
+}
 
 // Poll for input events
 void virtio_input_poll(void) {
-    if (!input_initialized) return;
-
     uint32_t len;
-    int idx = virtqueue_get_buf(&input_dev.vq, &len);
-    
-    while (idx >= 0) {
-        // Process event
-        virtio_input_event_t *evt = &events[idx % 32]; // Simplified mapping
-        
-        if (evt->type == EV_KEY && evt->value == 1) { // Key press
-            if (evt->code < sizeof(key_map)) {
-                char c = key_map[evt->code];
-                if (c) {
-                    keyboard_push_char(c);
-                }
-            }
-        } else if (evt->type == EV_REL) { // Mouse movement
-            if (evt->code == REL_X) {
-                mouse_state.x += (int32_t)evt->value;
-            } else if (evt->code == REL_Y) {
-                mouse_state.y += (int32_t)evt->value;
-            }
-        } else if (evt->type == EV_KEY) { // Mouse buttons
-            if (evt->code == BTN_LEFT) {
-                if (evt->value) mouse_state.buttons |= 1;
-                else mouse_state.buttons &= ~1;
-            } else if (evt->code == BTN_RIGHT) {
-                if (evt->value) mouse_state.buttons |= 2;
-                else mouse_state.buttons &= ~2;
-            } else if (evt->code == BTN_MIDDLE) {
-                if (evt->value) mouse_state.buttons |= 4;
-                else mouse_state.buttons &= ~4;
-            }
-        }
-        
-        // Requeue buffer
-        virtqueue_add_buf(&input_dev.vq, (uint8_t*)evt, sizeof(virtio_input_event_t), 1); // Device writable
-        
-        // Check next
+    int idx;
+
+    // Poll Keyboard
+    if (input_initialized) {
         idx = virtqueue_get_buf(&input_dev.vq, &len);
+        while (idx >= 0) {
+            virtio_input_event_t *evt = &events[idx % 32];
+            process_event(evt);
+            virtqueue_add_buf(&input_dev.vq, (uint8_t*)evt, sizeof(virtio_input_event_t), 1);
+            idx = virtqueue_get_buf(&input_dev.vq, &len);
+        }
+        virtqueue_kick(&input_dev);
     }
-    
-    // Kick if we processed anything (though usually input is interrupt driven, polling works for now)
-    virtqueue_kick(&input_dev);
+
+    // Poll Mouse
+    if (mouse_initialized) {
+        idx = virtqueue_get_buf(&mouse_dev.vq, &len);
+        while (idx >= 0) {
+            virtio_input_event_t *evt = &mouse_events[idx % 32];
+            process_event(evt);
+            virtqueue_add_buf(&mouse_dev.vq, (uint8_t*)evt, sizeof(virtio_input_event_t), 1);
+            idx = virtqueue_get_buf(&mouse_dev.vq, &len);
+        }
+        virtqueue_kick(&mouse_dev);
+    }
 }
 
 int virtio_input_init(void) {
@@ -155,13 +169,6 @@ int virtio_input_init(void) {
         pci_device_t *dev = pci_get_device(i);
         if (dev->vendor_id == PCI_VENDOR_VIRTIO && dev->device_id == VIRTIO_DEV_INPUT) {
             
-            // Found an input device
-            // For now, we only support one active input device structure (input_dev)
-            // But we can at least log that we found them.
-            // In a real implementation, we'd have a list of input devices.
-            // We'll initialize the first one as the primary keyboard/mouse.
-            
-            // Heuristic: QEMU usually puts Keyboard first, then Mouse
             const char *type = (found_count == 0) ? "Keyboard" : "Mouse";
             
             console_write("VirtIO-Input: Found ");
@@ -172,33 +179,28 @@ int virtio_input_init(void) {
             console_write_hex(dev->device);
             console_write("\n");
             
-            // Initialize it
-            // Note: This overwrites 'input_dev' global, so only the LAST one will be active
-            // if we don't handle this. 
-            // WAIT: If we overwrite, the previous one stops working?
-            // We need separate structures or just init the first one for now but LOG both?
-            // The user wants "VirtIO-Mouse and VirtIO-Keyboard when os initialized".
-            
-            // Let's try to initialize BOTH if we can, but we need storage.
-            // Since we don't have dynamic allocation for driver structs easily yet (or I don't want to complicate),
-            // I will just log them for now, and only init the first one (Keyboard).
-            // OR I can add a second static struct.
-            
             if (found_count == 0) {
+                 // Initialize Keyboard
                  if (virtio_init(dev, &input_dev) == 0) {
                      virtqueue_init(&input_dev);
-                     // Populate receive queue
-                     for (int j = 0; j < 16; j++) {
+                     for (int j = 0; j < 32; j++) {
                          virtqueue_add_buf(&input_dev.vq, (uint8_t*)&events[j], sizeof(virtio_input_event_t), 1);
                      }
                      virtqueue_kick(&input_dev);
                      console_write("VirtIO-Input: Keyboard Initialized\n");
                      input_initialized = 1;
                  }
-            } else {
-                // For the second device (Mouse), we just log it for now
-                // "VirtIO-Input: Mouse Detected"
-                console_write("VirtIO-Input: Mouse Detected (Driver pending)\n");
+            } else if (found_count == 1) {
+                // Initialize Mouse
+                 if (virtio_init(dev, &mouse_dev) == 0) {
+                     virtqueue_init(&mouse_dev);
+                     for (int j = 0; j < 32; j++) {
+                         virtqueue_add_buf(&mouse_dev.vq, (uint8_t*)&mouse_events[j], sizeof(virtio_input_event_t), 1);
+                     }
+                     virtqueue_kick(&mouse_dev);
+                     console_write("VirtIO-Input: Mouse Initialized\n");
+                     mouse_initialized = 1;
+                 }
             }
             
             found_count++;

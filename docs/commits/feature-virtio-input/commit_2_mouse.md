@@ -32,17 +32,18 @@ This commit extends the existing VirtIO-Input driver to support mouse input alon
 - `src/drivers/virtio_input.c`
 
 **Changes:**
+- Added support for multiple VirtIO input devices (Keyboard and Mouse)
+- Added `mouse_dev` structure and `mouse_events` buffer
 - Added mouse event type definitions (`EV_REL`, `REL_X`, `REL_Y`, `BTN_LEFT`, `BTN_RIGHT`, `BTN_MIDDLE`)
 - Added `mouse_state_t` structure to track cumulative position and button states
-- Enhanced `virtio_input_poll()` to handle three event types:
-  - **EV_KEY** for keyboard (existing) and mouse buttons (new)
-  - **EV_REL** for relative mouse movement (new)
+- Enhanced `virtio_input_poll()` to poll both keyboard and mouse devices separately
 - Implemented `mouse_get_position()` and `mouse_get_buttons()` API functions
 
 **Technical Details:**
+- QEMU exposes Keyboard and Mouse as separate PCI devices
+- The driver now scans and initializes both devices independently
 - Mouse position is tracked cumulatively (relative deltas are summed)
 - Button states use bitmask: Bit 0=Left, Bit 1=Right, Bit 2=Middle
-- Both keyboard and mouse events are processed from the same input device virtqueue
 
 ---
 
