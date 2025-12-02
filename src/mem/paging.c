@@ -26,13 +26,70 @@ static uint32_t *phys_to_ptr(uint32_t phys)
     return (uint32_t *)(phys);
 }
 
+static uint32_t evict_pd_idx = 0;
+static uint32_t evict_pt_idx = 0;
+
+static uint32_t get_virt_from_indices(uint32_t pd_index, uint32_t pt_index) {
+    return (pd_index << 22) | (pt_index << 12);
+}
+
+static int paging_evict_page(void) {
+    int pages_checked = 0;
+    // We only scan user space (0 to 0xC0000000), which is PD entries 0 to 767.
+    // 768 entries * 1024 pages = 786432 pages max.
+    int max_checks = 768 * 1024 * 2; // 2 passes
+    
+    while (pages_checked < max_checks) {
+        // Advance indices
+        evict_pt_idx++;
+        if (evict_pt_idx >= 1024) {
+            evict_pt_idx = 0;
+            evict_pd_idx++;
+            if (evict_pd_idx >= 768) {
+                evict_pd_idx = 0;
+            }
+        }
+        
+        if (current_pd[evict_pd_idx] & PAGE_PRESENT) {
+            uint32_t *pt = phys_to_ptr(current_pd[evict_pd_idx] & ~0xFFF);
+            if (pt[evict_pt_idx] & PAGE_PRESENT) {
+                 // Check Accessed bit (Bit 5)
+                 if (pt[evict_pt_idx] & 0x20) {
+                     pt[evict_pt_idx] &= ~0x20; // Clear accessed bit
+                     invlpg(get_virt_from_indices(evict_pd_idx, evict_pt_idx));
+                 } else {
+                     // Found victim (Accessed bit is 0)
+                     uint32_t virt = get_virt_from_indices(evict_pd_idx, evict_pt_idx);
+                     // Try to swap out. If successful, we freed a frame.
+                     if (paging_swap_out(virt) == 0) {
+                         return 1;
+                     }
+                 }
+            }
+        } else {
+            // Optimization: If PD entry is empty, skip all its PT entries
+            evict_pt_idx = 1023; // Next loop iteration will roll over to next PD
+        }
+        pages_checked++;
+    }
+    return 0;
+}
+
 static uint32_t alloc_frame_zero(void)
 {
     uint32_t phys = pmm_alloc_frame();
     if (phys == 0) {
-        console_write("PMM exhausted while building paging.\n");
-        for (;;) {
-            __asm__ volatile ("cli; hlt");
+        // Try to evict a page to free up memory
+        if (paging_evict_page()) {
+            phys = pmm_alloc_frame();
+        }
+        
+        // Check again
+        if (phys == 0) {
+            console_write("PMM exhausted. Eviction failed or no swap space.\n");
+            for (;;) {
+                __asm__ volatile ("cli; hlt");
+            }
         }
     }
     memset(phys_to_ptr(phys), 0, PAGE_SIZE);
