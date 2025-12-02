@@ -178,12 +178,46 @@ static void map_identity_region(uint32_t length)
 
 static void map_kernel_higher_half(void)
 {
-    extern uint8_t end;
-    uint32_t kernel_phys_start = 0x00100000U; /* linker places kernel at 1 MiB */
-    uint32_t kernel_phys_end = align_up((uint32_t)(uintptr_t)&end, PAGE_SIZE);
-    for (uint32_t phys = kernel_phys_start; phys < kernel_phys_end; phys += PAGE_SIZE) {
+    extern uint8_t _text_start, _text_end;
+    extern uint8_t _rodata_start, _rodata_end;
+    extern uint8_t _data_start, end; // _data_end is not enough, we need to cover BSS too which goes up to 'end'
+
+    uint32_t text_start = (uint32_t)&_text_start;
+    uint32_t text_end = align_up((uint32_t)&_text_end, PAGE_SIZE);
+    
+    uint32_t rodata_start = (uint32_t)&_rodata_start;
+    uint32_t rodata_end = align_up((uint32_t)&_rodata_end, PAGE_SIZE);
+    
+    uint32_t data_start = (uint32_t)&_data_start;
+    uint32_t kernel_end = align_up((uint32_t)&end, PAGE_SIZE);
+
+    // Map .text as Read-Only (Supervisor)
+    for (uint32_t phys = text_start; phys < text_end; phys += PAGE_SIZE) {
         uint32_t virt = KERNEL_VIRT_BASE + phys;
-        paging_map(virt, phys, PAGE_RW);
+        paging_map(virt, phys, 0); // 0 = Present, Supervisor, Read-Only (if WP=1)
+    }
+
+    // Map .rodata as Read-Only (Supervisor)
+    for (uint32_t phys = rodata_start; phys < rodata_end; phys += PAGE_SIZE) {
+        uint32_t virt = KERNEL_VIRT_BASE + phys;
+        paging_map(virt, phys, 0); // 0 = Present, Supervisor, Read-Only
+    }
+
+    // Map .data and .bss as Read-Write (Supervisor)
+    for (uint32_t phys = data_start; phys < kernel_end; phys += PAGE_SIZE) {
+        uint32_t virt = KERNEL_VIRT_BASE + phys;
+        paging_map(virt, phys, PAGE_RW); // Present, Supervisor, Read-Write
+    }
+    
+    // Map any gaps (e.g. multiboot header before text) as Read-Only
+    // The kernel starts at 1MB. _text_start might be slightly after 1MB if multiboot header is first.
+    // We should map from 1MB to _text_start if there's a gap.
+    uint32_t kernel_base = 0x00100000U;
+    if (text_start > kernel_base) {
+        for (uint32_t phys = kernel_base; phys < text_start; phys += PAGE_SIZE) {
+             uint32_t virt = KERNEL_VIRT_BASE + phys;
+             paging_map(virt, phys, 0);
+        }
     }
 }
 
@@ -303,8 +337,14 @@ void paging_init(void)
 
     load_page_directory(current_pd_phys);
     
+    // Enable Write Protect (WP) bit in CR0 to enforce Read-Only protection for Ring 0
+    uint32_t cr0;
+    __asm__ volatile ("mov %%cr0, %0" : "=r"(cr0));
+    cr0 |= 0x10000; // Bit 16 = WP
+    __asm__ volatile ("mov %0, %%cr0" :: "r"(cr0));
+    
     register_interrupt_handler(14, page_fault_handler);
-    console_write("Paging enabled. Kernel mapped at higher half.\n");
+    console_write("Paging enabled. Kernel mapped at higher half. WP enabled.\n");
 }
 
 // Get kernel page directory physical address

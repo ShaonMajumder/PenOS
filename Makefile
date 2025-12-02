@@ -55,6 +55,7 @@ $(BUILD)/kernel.bin: $(OBJS)
 		$(BUILD)/mem/paging.o \
 		$(BUILD)/mem/pmm.o \
 		$(BUILD)/mem/swap.o \
+		$(BUILD)/mem/shm.o \
 		$(BUILD)/sched/sched.o \
 		$(BUILD)/shell/shell.o \
 		$(BUILD)/sys/power.o \

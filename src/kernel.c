@@ -17,6 +17,7 @@
 #include "mem/paging.h"
 #include "mem/heap.h"
 #include "mem/swap.h"
+#include "mem/shm.h"
 #include "sched/sched.h"
 #include "sys/syscall.h"
 #include "shell/shell.h"
@@ -76,6 +77,7 @@ void kernel_main(uint32_t magic, multiboot_info_t *mb_info)
     
     ahci_init();
     swap_init();
+    shm_init();
     
     // Initialize other VirtIO drivers
     virtio_input_init();
