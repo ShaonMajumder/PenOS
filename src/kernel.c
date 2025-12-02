@@ -5,6 +5,7 @@
 #include "arch/x86/idt.h"
 #include "arch/x86/interrupts.h"
 #include "arch/x86/timer.h"
+#include "arch/x86/rtc.h"
 #include "arch/x86/pic.h"
 #include "drivers/keyboard.h"
 #include "drivers/mouse.h"
@@ -57,6 +58,7 @@ void kernel_main(uint32_t magic, multiboot_info_t *mb_info)
     pic_remap();
     interrupt_init();
     timer_init(100);
+    rtc_init();
     pmm_init(mb_info);
     paging_init();
     heap_init();

@@ -57,6 +57,7 @@ make run        # Boot in QEMU
 | **VirtIO-9P** | Paravirtualized | Host filesystem access (9P2000.L) |
 | **AHCI/SATA** | Modern | Hot-plug support, NCQ |
 | **PCI** | Bus enumeration | Device discovery |
+| **RTC** | CMOS | Real-Time Clock, Date/Time |
 | **PC Speaker** | Legacy | Beep tones, startup melody |
 
 ### System Services
@@ -117,7 +118,7 @@ make run        # Boot in QEMU
 
 | Area | What you get today | Deep-dive docs | Key sources |
 | --- | --- | --- | --- |
-| **Boot & CPU** | GRUB theme, `boot.s`, GDT/IDT, PIC, PIT @100Hz, TSS for Ring 3 | [`architecture.md`](docs/architecture.md#1-cpu-bring-up), [`bootstrap.md`](docs/commits/feature-core/1_bootstrap.md) | `grub/themes/penos`, `src/boot.s`, `src/arch/x86/` |
+| **Boot & CPU** | GRUB theme, `boot.s`, GDT/IDT, PIC, PIT @100Hz, RTC, TSS for Ring 3 | [`architecture.md`](docs/architecture.md#1-cpu-bring-up), [`bootstrap.md`](docs/commits/feature-core/1_bootstrap.md), [`rtc`](docs/commits/feature-core/commit_2_rtc.md) | `grub/themes/penos`, `src/boot.s`, `src/arch/x86/` |
 | **Memory** | Bitmap PMM, higher-half paging, recursive mapping, freelist heap, per-process page directories, demand paging, swap space, memory protection, shared memory IPC | [`architecture.md`](docs/architecture.md#2-memory-management), [`pmm`](docs/commits/feature-pmm/1_bitmap_pmm.md), [`paging`](docs/commits/feature-paging/1_dynamic_vmm.md), [`demand-paging`](docs/commits/feature-paging/2_demand_paging.md), [`swap-space`](docs/commits/feature-memory/3_swap_space.md), [`auto-eviction`](docs/commits/feature-swap/commit_3_automatic_eviction.md), [`memory-protection`](docs/commits/feature-memory/commit_4_memory_protection.md), [`shared-memory`](docs/commits/feature-memory/commit_5_shared_memory.md), [`heap`](docs/commits/feature-heap/), [`process-isolation`](docs/commits/feature-process-isolation/commit_1_per_process_page_directories.md) | `src/mem/` |
 | **Scheduler** | Preemptive round-robin, task lifecycle, zombie reaping, per-process address spaces | [`architecture.md`](docs/architecture.md#1-cpu-bring-up), [`scheduler`](docs/commits/feature-scheduler/) | `src/sched/sched.c` |
 | **User Mode** | Ring 3 execution, TSS, syscall library (`exec`, `exit`, `write`, `yield`, `getpid`, `ticks`), process isolation | [`usermode`](docs/commits/feature-usermode/commit_1_usermode.md), [`syscalls`](docs/commits/feature-usermode/commit_2_syscall_interface.md), [`int80`](docs/commits/feature-syscall/1_int80.md), [`exec`](docs/commits/feature-exec/commit_1_exec_syscall_foundation.md) | `src/arch/x86/tss.c`, `src/sys/syscall.c`, `src/lib/syscall.c` |
@@ -135,7 +136,7 @@ make run        # Boot in QEMU
 - **[VirtIO-9P Guide](docs/virtio-9p-guide.md)** - Host filesystem setup
 
 ### Feature Documentation
-- **Core:** [Bootstrap](docs/commits/feature-core/1_bootstrap.md)
+- **Core:** [Bootstrap](docs/commits/feature-core/1_bootstrap.md), [RTC](docs/commits/feature-core/commit_2_rtc.md)
 - **Memory:** [PMM](docs/commits/feature-pmm/1_bitmap_pmm.md), [Paging](docs/commits/feature-paging/1_dynamic_vmm.md), [Demand Paging](docs/commits/feature-paging/2_demand_paging.md), [Swap Space](docs/commits/feature-memory/3_swap_space.md), [Auto Eviction](docs/commits/feature-swap/commit_3_automatic_eviction.md), [Memory Protection](docs/commits/feature-memory/commit_4_memory_protection.md), [Shared Memory](docs/commits/feature-memory/commit_5_shared_memory.md), [Heap](docs/commits/feature-heap/)
 - **Scheduler:** [Preemptive RR](docs/commits/feature-scheduler/1_preemptive_rr.md), [Task Lifecycle](docs/commits/feature-scheduler/2_task_lifecycle.md)
 - **User Mode:** [Ring 3 Support](docs/commits/feature-usermode/commit_1_usermode.md), [Syscall Interface](docs/commits/feature-usermode/commit_2_syscall_interface.md), [Int80 Handler](docs/commits/feature-syscall/1_int80.md), [Exec & ELF](docs/commits/feature-exec/commit_1_exec_syscall_foundation.md)
@@ -145,7 +146,7 @@ make run        # Boot in QEMU
 - **UI:** [Framebuffer](docs/commits/feature-framebuffer/1_framebuffer-console.md), [GRUB Theme](docs/commits/feature-branding/1_grub_theme.md), [Shell Improvements](docs/commits/feature-shell-help-improvements/1_improve_shell_help_and_fs_commands.md)
 
 ### Release History
-[v0.10.0](docs/versions/v0.10.0.md) → [v0.9.0](docs/versions/v0.9.0.md) → [v0.8.0](docs/versions/v0.8.0.md) → [v0.7.0](docs/versions/v0.7.0.md) → [v0.6.0](docs/versions/v0.6.0.md) → ... → [v0.1.0](docs/versions/v0.1.0.md)
+[v0.11.0](docs/versions/v0.11.0.md) → [v0.10.0](docs/versions/v0.10.0.md) → [v0.9.0](docs/versions/v0.9.0.md) → [v0.8.0](docs/versions/v0.8.0.md) → [v0.7.0](docs/versions/v0.7.0.md) → [v0.6.0](docs/versions/v0.6.0.md) → ... → [v0.1.0](docs/versions/v0.1.0.md)
 
 ## 🎯 Project Structure
 

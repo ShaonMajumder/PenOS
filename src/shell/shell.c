@@ -13,7 +13,9 @@
 #include "fs/9p.h"
 #include "drivers/virtio.h"
 #include "drivers/mouse.h"
+#include "drivers/mouse.h"
 #include "lib/syscall.h"
+#include "arch/x86/rtc.h"
 
 typedef struct
 {
@@ -304,6 +306,7 @@ static void cmd_help(void)
     console_write("  echo <text>       Print <text> back to you\n");
     console_write("  ticks             Show system tick counter\n");
     console_write("  sysinfo           Show simple system information\n");
+    console_write("  date [+/-offset]  Show current date/time. Optional: set timezone (e.g. +6)\n");
     console_write("  ps                List running tasks\n");
     console_write("  spawn <name>      Start a demo task (counter|spinner)\n");
     console_write("  kill <pid>        Stop a task by PID\n");
@@ -717,6 +720,112 @@ static void user_mode_test_task(void) {
     exit();
 }
 
+static int timezone_offset = 0;
+
+static int is_leap_year(uint32_t year) {
+    return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+}
+
+static int get_days_in_month(int month, uint32_t year) {
+    static const int days_per_month[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    if (month == 2 && is_leap_year(year)) return 29;
+    return days_per_month[month];
+}
+
+static void cmd_date(const char *args) {
+    // Parse arguments if present to set timezone
+    while (*args == ' ') args++;
+    if (*args != '\0') {
+        // Simple parsing: expect "+N" or "-N"
+        int sign = 1;
+        if (*args == '-') {
+            sign = -1;
+            args++;
+        } else if (*args == '+') {
+            args++;
+        }
+        
+        uint32_t val;
+        if (parse_uint(args, &val) == 0) {
+            if (val > 14) {
+                console_write("Invalid timezone offset (must be between -14 and +14)\n");
+                return;
+            }
+            timezone_offset = sign * (int)val;
+            console_write("Timezone set to UTC");
+            if (timezone_offset >= 0) console_putc('+');
+            console_write_dec(timezone_offset);
+            console_putc('\n');
+        } else {
+            console_write("Usage: date [+/-offset]\n");
+            return;
+        }
+    }
+
+    rtc_time_t t;
+    rtc_get_time(&t);
+    
+    // Apply timezone offset
+    int hour = (int)t.hour + timezone_offset;
+    int day = t.day;
+    int month = t.month;
+    uint32_t year = t.year;
+    
+    // Handle rollover
+    if (hour >= 24) {
+        hour -= 24;
+        day++;
+        if (day > get_days_in_month(month, year)) {
+            day = 1;
+            month++;
+            if (month > 12) {
+                month = 1;
+                year++;
+            }
+        }
+    } else if (hour < 0) {
+        hour += 24;
+        day--;
+        if (day < 1) {
+            month--;
+            if (month < 1) {
+                month = 12;
+                year--;
+            }
+            day = get_days_in_month(month, year);
+        }
+    }
+    
+    console_write("Date: ");
+    console_write_dec(year);
+    console_putc('-');
+    if (month < 10) console_putc('0');
+    console_write_dec(month);
+    console_putc('-');
+    if (day < 10) console_putc('0');
+    console_write_dec(day);
+    
+    console_write(" Time: ");
+    if (hour < 10) console_putc('0');
+    console_write_dec(hour);
+    console_putc(':');
+    if (t.minute < 10) console_putc('0');
+    console_write_dec(t.minute);
+    console_putc(':');
+    if (t.second < 10) console_putc('0');
+    console_write_dec(t.second);
+    
+    if (timezone_offset != 0) {
+        console_write(" (UTC");
+        if (timezone_offset > 0) console_putc('+');
+        console_write_dec(timezone_offset);
+        console_write(")");
+    } else {
+        console_write(" (UTC)");
+    }
+    console_putc('\n');
+}
+
 static void cmd_usermode(void) {
     console_write("Spawning User Mode task...\n");
     int32_t pid = sched_spawn_user(user_mode_test_task, "user_test");
@@ -772,6 +881,10 @@ void shell_run(void)
         else if (!strcmp(input, "sysinfo"))
         {
             app_sysinfo();
+        }
+        else if (!strncmp(input, "date", 4))
+        {
+            cmd_date(input + 4);
         }
         else if (!strcmp(input, "ps"))
         {
